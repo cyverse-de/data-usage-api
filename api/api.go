@@ -10,6 +10,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// nolint - for now
 var log = logging.Log.WithFields(logrus.Fields{"package": "api"})
 
 type App struct {
