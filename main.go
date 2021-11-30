@@ -93,7 +93,7 @@ func main() {
 	logging.SetupLogging(*logLevel)
 
 	log.Infof("config path is %s", *configPath)
-	log.Infof("listen port is %d", listenPort)
+	log.Infof("listen port is %d", *listenPort)
 
 	config, err = configurate.Init(*configPath)
 	if err != nil {
@@ -125,7 +125,7 @@ func main() {
 	dbconn = sqlx.MustConnect("postgres", dbURI)
 	icatconn = sqlx.MustConnect("postgres", icatURI)
 
-	app := api.New(dbconn, icatconn, userSuffix)
+	app := api.New(dbconn, "public", icatconn, userSuffix)
 
 	//workerConfig := worker.Config{
 	//	Name:                    strings.ReplaceAll(uuid.New().String(), "-", ""),

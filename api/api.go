@@ -15,14 +15,16 @@ var log = logging.Log.WithFields(logrus.Fields{"package": "api"})
 
 type App struct {
 	dedb       *sqlx.DB
+	schema     string
 	icat       *sqlx.DB
 	router     *echo.Echo
 	userSuffix string
 }
 
-func New(dedb, icat *sqlx.DB, userSuffix string) *App {
+func New(dedb *sqlx.DB, schema string, icat *sqlx.DB, userSuffix string) *App {
 	return &App{
 		dedb:       dedb,
+		schema:     schema,
 		icat:       icat,
 		router:     echo.New(),
 		userSuffix: userSuffix,
