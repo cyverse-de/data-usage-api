@@ -2,9 +2,13 @@ package main
 
 import (
 	"flag"
+	"fmt"
+	"net/http"
+	"strconv"
 	"time"
 
 	"github.com/cyverse-de/configurate"
+	"github.com/cyverse-de/data-usage-api/api"
 	"github.com/cyverse-de/data-usage-api/logging"
 	"github.com/jmoiron/sqlx"
 	"github.com/sirupsen/logrus"
@@ -74,14 +78,13 @@ var log = logging.Log.WithFields(logrus.Fields{"package": "main"})
 
 func main() {
 	var (
-		err    error
-		config *viper.Viper
-		dbconn *sqlx.DB
+		err      error
+		config   *viper.Viper
+		dbconn   *sqlx.DB
+		icatconn *sqlx.DB
 
-		configPath = flag.String("config", "/etc/iplant/de/data-usage-api.yml", "Full path to the configuration file")
-		listenPort = flag.Int("port", 60000, "The port the service listens on for requests")
-		//queue                    = flag.String("queue", "resource-usage-api", "The AMQP queue name for this service")
-		//reconnect                = flag.Bool("reconnect", false, "Whether the AMQP client should reconnect on failure")
+		configPath          = flag.String("config", "/etc/iplant/de/data-usage-api.yml", "Full path to the configuration file")
+		listenPort          = flag.Int("port", 60000, "The port the service listens on for requests")
 		logLevel            = flag.String("log-level", "info", "One of trace, debug, info, warn, error, fatal, or panic.")
 		refreshIntervalFlag = flag.String("refresh-interval", "3h", "The time between full re-scans of the data store. Must parse as a time.Duration.")
 	)
@@ -113,14 +116,16 @@ func main() {
 		log.Fatal("users.domain must be set in the configuration file")
 	}
 
-	refreshInterval, err := time.ParseDuration(*refreshIntervalFlag)
+	//refreshInterval, err := time.ParseDuration(*refreshIntervalFlag)
+	_, err = time.ParseDuration(*refreshIntervalFlag)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	dbconn = sqlx.MustConnect("postgres", dbURI)
+	icatconn = sqlx.MustConnect("postgres", icatURI)
 
-	//app := internal.New(dbconn, userSuffix)
+	app := api.New(dbconn, icatconn, userSuffix)
 
 	//workerConfig := worker.Config{
 	//	Name:                    strings.ReplaceAll(uuid.New().String(), "-", ""),
@@ -145,6 +150,6 @@ func main() {
 
 	//go w.Start(context.Background())
 
-	//log.Infof("listening on port %d", *listenPort)
-	//log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), app.Router()))
+	log.Infof("listening on port %d", *listenPort)
+	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), app.Router()))
 }

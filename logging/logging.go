@@ -7,7 +7,7 @@ import (
 )
 
 var Log = logrus.WithFields(logrus.Fields{
-	"service": "resource-usage-api",
+	"service": "data-usage-api",
 })
 
 func SetupLogging(configuredLevel string) {
