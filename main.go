@@ -76,6 +76,18 @@ var log = logging.Log.WithFields(logrus.Fields{"package": "main"})
 //	}
 //}
 
+const defaultConfig = `
+db:
+  uri: postgres://de:notprod@dedb:5432/de?sslmode=disable
+  schema: public
+
+icat:
+  uri: postgres://ICAT:fakepassword@icat-db:5432/ICAT?sslmode=disable
+
+users:
+  domain: example.com
+`
+
 func main() {
 	var (
 		err      error
@@ -95,7 +107,7 @@ func main() {
 	log.Infof("config path is %s", *configPath)
 	log.Infof("listen port is %d", *listenPort)
 
-	config, err = configurate.Init(*configPath)
+	config, err = configurate.InitDefaults(*configPath, defaultConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -104,6 +116,11 @@ func main() {
 	dbURI := config.GetString("db.uri")
 	if dbURI == "" {
 		log.Fatal("db.uri must be set in the configuration file")
+	}
+
+	dbSchema := config.GetString("db.schema")
+	if dbSchema == "" {
+		log.Fatal("db.schema must be set in the configuration file")
 	}
 
 	icatURI := config.GetString("icat.uri")
@@ -125,7 +142,7 @@ func main() {
 	dbconn = sqlx.MustConnect("postgres", dbURI)
 	icatconn = sqlx.MustConnect("postgres", icatURI)
 
-	app := api.New(dbconn, "public", icatconn, userSuffix)
+	app := api.New(dbconn, dbSchema, icatconn, userSuffix)
 
 	//workerConfig := worker.Config{
 	//	Name:                    strings.ReplaceAll(uuid.New().String(), "-", ""),

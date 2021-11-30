@@ -75,3 +75,24 @@ func (d *DEDatabase) UserID(context context.Context, username string) (string, e
 
 	return userID, nil
 }
+
+func (d *DEDatabase) UserCurrentDataUsage(context context.Context, username string) (*UserDataUsage, error) {
+	var usage UserDataUsage
+
+	sql, args, err := psql.Select("d.id", "d.total", "d.user_id", "u.username", "d.time AT TIME ZONE (select current_setting('TIMEZONE')) AS time", "d.last_modified AT TIME ZONE (select current_setting('TIMEZONE')) AS last_modified").
+		From(fmt.Sprintf("%s d", d.Table("user_data_usage"))).
+		Join(fmt.Sprintf("%s u ON d.user_id = u.id", d.Table("users"))).
+		OrderBy("d.time DESC").
+		Limit(1).
+		ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	err = d.db.QueryRowxContext(context, sql, args...).StructScan(&usage)
+	if err != nil {
+		return nil, err
+	}
+
+	return &usage, err
+}

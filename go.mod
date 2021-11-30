@@ -8,6 +8,7 @@ require (
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/labstack/echo/v4 v4.6.0
 	github.com/lib/pq v1.10.4
+	github.com/pkg/errors v0.8.1
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/viper v1.9.0
 )
