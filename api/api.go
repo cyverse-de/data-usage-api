@@ -40,5 +40,8 @@ func (a *App) Router() *echo.Echo {
 	a.router.HTTPErrorHandler = logging.HTTPErrorHandler
 	a.router.GET("/", a.GreetingHandler).Name = "greeting"
 
+	userdata := a.router.Group("/:username/data")
+	userdata.GET("/current", a.UserCurrentUsageHandler)
+
 	return a.router
 }
