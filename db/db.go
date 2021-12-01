@@ -41,14 +41,14 @@ func NewDE(db DatabaseAccessor, schema string) *DEDatabase {
 	return &DEDatabase{db: db, schema: schema}
 }
 
-func (d *DEDatabase) Table(name string) string {
-	return fmt.Sprintf("%s.%s", d.schema, name)
+func (d *DEDatabase) Table(name, alias string) string {
+	return fmt.Sprintf("%s.%s AS %s", d.schema, name, alias)
 }
 
 func (d *DEDatabase) Username(context context.Context, userID string) (string, error) {
 	var username string
 
-	sql, args, err := psql.Select("username").From(d.Table("users")).Where("id = ?", userID).ToSql()
+	sql, args, err := psql.Select("username").From(d.Table("users", "u")).Where("id = ?", userID).ToSql()
 	if err != nil {
 		return "", err
 	}
@@ -64,7 +64,7 @@ func (d *DEDatabase) Username(context context.Context, userID string) (string, e
 func (d *DEDatabase) UserID(context context.Context, username string) (string, error) {
 	var userID string
 
-	sql, args, err := psql.Select("id").From(d.Table("users")).Where("username = ?", username).ToSql()
+	sql, args, err := psql.Select("id").From(d.Table("users", "u")).Where("username = ?", username).ToSql()
 	if err != nil {
 		return "", err
 	}
@@ -79,8 +79,8 @@ func (d *DEDatabase) UserID(context context.Context, username string) (string, e
 
 func (d *DEDatabase) baseUserUsageSelect() squirrel.SelectBuilder {
 	return psql.Select("d.id", "d.total", "d.user_id", "u.username", "d.time AT TIME ZONE (select current_setting('TIMEZONE')) AS time", "d.last_modified AT TIME ZONE (select current_setting('TIMEZONE')) AS last_modified").
-		From(fmt.Sprintf("%s d", d.Table("user_data_usage"))).
-		Join(fmt.Sprintf("%s u ON d.user_id = u.id", d.Table("users")))
+		From(d.Table("user_data_usage", "d")).
+		Join(d.Table("users", "u"))
 }
 
 func (d *DEDatabase) UserCurrentDataUsage(context context.Context, username string) (*UserDataUsage, error) {
@@ -104,38 +104,19 @@ func (d *DEDatabase) UserCurrentDataUsage(context context.Context, username stri
 	return &usage, err
 }
 
-func (d *DEDatabase) GetUserDataUsage(context context.Context, id string) (*UserDataUsage, error) {
-	var usage UserDataUsage
-
-	sql, args, err := d.baseUserUsageSelect().
-		Where("d.id::text = ?", id).
-		ToSql()
-
-	if err != nil {
-		return nil, errors.Wrap(err, "Error formatting SQL query")
-	}
-
-	err = d.db.QueryRowxContext(context, sql, args...).StructScan(&usage)
-	if err != nil {
-		return nil, errors.Wrap(err, "Error running query")
-	}
-
-	return &usage, err
-}
-
 func (d *DEDatabase) AddUserDataUsage(context context.Context, username string, total int64, time time.Time) (*UserDataUsage, error) {
 	log.Tracef("Inserting for %s: %d at %s", username, total, time)
 
-	sql, args, err := psql.Insert(d.Table("user_data_usage")).
+	sql, args, err := psql.Insert(d.Table("user_data_usage", "d")).
 		Columns("total", "time", "user_id").
 		Select(psql.Select().
 			Column("? AS total", total).
 			Column("? AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS time", time).
-			Column("users.id").
-			From(d.Table("users")).
+			Column("u.id").
+			From(d.Table("users", "u")).
 			Where("username = ?", username),
 		).
-		Suffix("RETURNING user_data_usage.id").
+		Suffix("RETURNING d.id, d.total, d.user_id, (SELECT username from users WHERE id = d.user_id) as username, d.time AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS time, d.last_modified AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS last_modified").
 		ToSql()
 
 	if err != nil {
@@ -144,12 +125,12 @@ func (d *DEDatabase) AddUserDataUsage(context context.Context, username string, 
 
 	log.Trace(sql)
 
-	var id string
-	err = d.db.QueryRowxContext(context, sql, args...).Scan(&id)
+	var usage UserDataUsage
+	err = d.db.QueryRowxContext(context, sql, args...).StructScan(&usage)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Error running query")
 	}
 
-	return d.GetUserDataUsage(context, id)
+	return &usage, err
 }
