@@ -19,63 +19,6 @@ import (
 
 var log = logging.Log.WithFields(logrus.Fields{"package": "main"})
 
-//func getHandler(dbClient *sqlx.DB) amqp.HandlerFn {
-//	dedb := db.New(dbClient)
-//
-//	return func(userID, externalID, state string) {
-//		event := db.CPUUsageEvent{
-//			CreatedBy: userID,
-//		}
-//
-//		// Set up a context with a deadline of 2 minutes. This should prevent a backlog of go routines
-//		// from building up.
-//		ctx, cancelFn := context.WithDeadline(context.Background(), time.Now().Add(time.Minute*2))
-//		defer cancelFn()
-//
-//		// Look up the analysis ID from the externalID.
-//		analysisID, err := dedb.GetAnalysisIDByExternalID(ctx, externalID)
-//		if err != nil {
-//			log.Error(err)
-//			return
-//		}
-//
-//		// Get the start date of the analysis.
-//		analysis, err := dedb.Analysis(ctx, userID, analysisID)
-//		if err != nil {
-//			log.Error(err)
-//			return
-//		}
-//
-//		if !analysis.StartDate.Valid {
-//			log.Errorf("analysis %s: start date was null", analysis.ID)
-//		}
-//		startDate := analysis.StartDate.Time
-//
-//		// Get the current date. Can't really depend on the sent_on field.
-//		nowTime := time.Now()
-//
-//		// Calculate the number of hours betwen the start date and the current date.
-//		hours := nowTime.Sub(startDate).Hours()
-//
-//		// Get the number of millicores requested for the analysis.
-//		// TODO: figure out the right way to handle default values. Default to 1.0 for now.
-//		millicores := 1000.0
-//
-//		// Multiply the number of hours by the number of millicores.
-//		// Divide the result by 1000 to get the number of CPU hours. 1000 millicores = 1 CPU core.
-//		cpuHours := (millicores * hours) / 1000.0
-//
-//		// Add the event to the database.
-//		event.EffectiveDate = nowTime
-//		event.RecordDate = nowTime
-//		event.Value = int64(cpuHours)
-//
-//		if err = dedb.AddCPUUsageEvent(ctx, &event); err != nil {
-//			log.Error(err)
-//		}
-//	}
-//}
-
 const defaultConfig = `
 db:
   uri: postgres://de:notprod@dedb:5432/de?sslmode=disable
@@ -83,6 +26,9 @@ db:
 
 icat:
   uri: postgres://ICAT:fakepassword@icat-db:5432/ICAT?sslmode=disable
+  rootResources:
+    - mainIngestRes
+    - mainReplRes
 
 users:
   domain: example.com
@@ -133,6 +79,11 @@ func main() {
 		log.Fatal("users.domain must be set in the configuration file")
 	}
 
+	rootResourceNames := config.GetStringSlice("icat.rootResources")
+	if rootResourceNames == nil {
+		log.Fatal("icat.rootResources must be set in the configuration file")
+	}
+
 	//refreshInterval, err := time.ParseDuration(*refreshIntervalFlag)
 	_, err = time.ParseDuration(*refreshIntervalFlag)
 	if err != nil {
@@ -166,6 +117,24 @@ func main() {
 	//log.Infof("worker ID is %s", w.ID)
 
 	//go w.Start(context.Background())
+
+	//dedb := db.NewDE(dbconn, dbSchema)
+	//usage, err := dedb.AddUserDataUsage(context.Background(), "mian@iplantcollaborative.org", 12345678, time.Now())
+	//if err != nil {
+	//	log.Info(err)
+	//}
+	//log.Info(usage)
+
+	//icattx, err := icatconn.BeginTxx(context.Background(), nil)
+	//if err != nil {
+	//	log.Fatal(err)
+	//}
+	//icatdb := db.NewICAT(icattx, userSuffix, "cyverse")
+	//usage, err := icatdb.UserCurrentDataUsage(context.Background(), "mian", rootResourceNames)
+	//if err != nil {
+	//	log.Error(err)
+	//}
+	//log.Info(usage)
 
 	log.Infof("listening on port %d", *listenPort)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), app.Router()))

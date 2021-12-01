@@ -14,10 +14,18 @@ func HTTPErrorHandler(err error, c echo.Context) {
 
 	switch t := err.(type) {
 	case ErrorResponse:
-		code = http.StatusBadRequest
+		if t.HTTPStatusCode != 0 {
+			code = t.HTTPStatusCode
+		} else {
+			code = http.StatusBadRequest
+		}
 		body = t
 	case *ErrorResponse:
-		code = http.StatusBadRequest
+		if t.HTTPStatusCode != 0 {
+			code = t.HTTPStatusCode
+		} else {
+			code = http.StatusBadRequest
+		}
 		body = t
 	case *echo.HTTPError:
 		echoErr := t
@@ -35,9 +43,10 @@ func HTTPErrorHandler(err error, c echo.Context) {
 //
 // swagger:response errorResponse
 type ErrorResponse struct {
-	Message   string                  `json:"message"`
-	ErrorCode string                  `json:"error_code,omitempty"`
-	Details   *map[string]interface{} `json:"details,omitempty"`
+	Message        string                  `json:"message"`
+	HTTPStatusCode int                     `json:"-"`
+	ErrorCode      string                  `json:"error_code,omitempty"`
+	Details        *map[string]interface{} `json:"details,omitempty"`
 }
 
 // ErrorBytes returns a byte-array representation of an ErrorResponse.
