@@ -167,6 +167,13 @@ func main() {
 
 	//go w.Start(context.Background())
 
+	//dedb := db.NewDE(dbconn, dbSchema)
+	//usage, err := dedb.AddUserDataUsage(context.Background(), "mian@iplantcollaborative.org", 12345678, time.Now())
+	//if err != nil {
+	//	log.Info(err)
+	//}
+	//log.Info(usage)
+
 	log.Infof("listening on port %d", *listenPort)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), app.Router()))
 }

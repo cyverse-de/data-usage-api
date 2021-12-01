@@ -9,6 +9,7 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/cyverse-de/data-usage-api/logging"
 	"github.com/jmoiron/sqlx"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 )
 
@@ -76,25 +77,79 @@ func (d *DEDatabase) UserID(context context.Context, username string) (string, e
 	return userID, nil
 }
 
+func (d *DEDatabase) baseUserUsageSelect() squirrel.SelectBuilder {
+	return psql.Select("d.id", "d.total", "d.user_id", "u.username", "d.time AT TIME ZONE (select current_setting('TIMEZONE')) AS time", "d.last_modified AT TIME ZONE (select current_setting('TIMEZONE')) AS last_modified").
+		From(fmt.Sprintf("%s d", d.Table("user_data_usage"))).
+		Join(fmt.Sprintf("%s u ON d.user_id = u.id", d.Table("users")))
+}
+
 func (d *DEDatabase) UserCurrentDataUsage(context context.Context, username string) (*UserDataUsage, error) {
 	var usage UserDataUsage
 
 	log.Tracef("Getting data usage for %s", username)
 
-	sql, args, err := psql.Select("d.id", "d.total", "d.user_id", "u.username", "d.time AT TIME ZONE (select current_setting('TIMEZONE')) AS time", "d.last_modified AT TIME ZONE (select current_setting('TIMEZONE')) AS last_modified").
-		From(fmt.Sprintf("%s d", d.Table("user_data_usage"))).
-		Join(fmt.Sprintf("%s u ON d.user_id = u.id", d.Table("users"))).
+	sql, args, err := d.baseUserUsageSelect().
 		OrderBy("d.time DESC").
 		Limit(1).
 		ToSql()
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Error formatting SQL query")
 	}
 
 	err = d.db.QueryRowxContext(context, sql, args...).StructScan(&usage)
 	if err != nil {
-		return nil, err
+		return nil, errors.Wrap(err, "Error running query")
 	}
 
 	return &usage, err
+}
+
+func (d *DEDatabase) GetUserDataUsage(context context.Context, id string) (*UserDataUsage, error) {
+	var usage UserDataUsage
+
+	sql, args, err := d.baseUserUsageSelect().
+		Where("d.id::text = ?", id).
+		ToSql()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "Error formatting SQL query")
+	}
+
+	err = d.db.QueryRowxContext(context, sql, args...).StructScan(&usage)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error running query")
+	}
+
+	return &usage, err
+}
+
+func (d *DEDatabase) AddUserDataUsage(context context.Context, username string, total int64, time time.Time) (*UserDataUsage, error) {
+	log.Tracef("Inserting for %s: %d at %s", username, total, time)
+
+	sql, args, err := psql.Insert(d.Table("user_data_usage")).
+		Columns("total", "time", "user_id").
+		Select(psql.Select().
+			Column("? AS total", total).
+			Column("? AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS time", time).
+			Column("users.id").
+			From(d.Table("users")).
+			Where("username = ?", username),
+		).
+		Suffix("RETURNING user_data_usage.id").
+		ToSql()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "Error formatting SQL query")
+	}
+
+	log.Trace(sql)
+
+	var id string
+	err = d.db.QueryRowxContext(context, sql, args...).Scan(&id)
+
+	if err != nil {
+		return nil, errors.Wrap(err, "Error running query")
+	}
+
+	return d.GetUserDataUsage(context, id)
 }
