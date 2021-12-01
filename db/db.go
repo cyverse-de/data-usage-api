@@ -30,6 +30,7 @@ type DatabaseAccessor interface {
 	QueryRowxContext(context.Context, string, ...interface{}) *sqlx.Row
 	QueryxContext(context.Context, string, ...interface{}) (*sqlx.Rows, error)
 	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
+	GetContext(context.Context, interface{}, string, ...interface{}) error
 }
 
 type DEDatabase struct {
@@ -80,7 +81,7 @@ func (d *DEDatabase) UserID(context context.Context, username string) (string, e
 func (d *DEDatabase) baseUserUsageSelect() squirrel.SelectBuilder {
 	return psql.Select("d.id", "d.total", "d.user_id", "u.username", "d.time AT TIME ZONE (select current_setting('TIMEZONE')) AS time", "d.last_modified AT TIME ZONE (select current_setting('TIMEZONE')) AS last_modified").
 		From(d.Table("user_data_usage", "d")).
-		Join(d.Table("users", "u"))
+		Join(fmt.Sprintf("%s ON (d.user_id = u.id)", d.Table("users", "u")))
 }
 
 func (d *DEDatabase) UserCurrentDataUsage(context context.Context, username string) (*UserDataUsage, error) {
@@ -96,7 +97,9 @@ func (d *DEDatabase) UserCurrentDataUsage(context context.Context, username stri
 		return nil, errors.Wrap(err, "Error formatting SQL query")
 	}
 
-	err = d.db.QueryRowxContext(context, sql, args...).StructScan(&usage)
+	log.Tracef("%s, %+v", sql, args)
+
+	err = d.db.GetContext(context, &usage, sql, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error running query")
 	}
@@ -123,7 +126,7 @@ func (d *DEDatabase) AddUserDataUsage(context context.Context, username string, 
 		return nil, errors.Wrap(err, "Error formatting SQL query")
 	}
 
-	log.Trace(sql)
+	log.Tracef("%s, %+v", sql, args)
 
 	var usage UserDataUsage
 	err = d.db.QueryRowxContext(context, sql, args...).StructScan(&usage)
