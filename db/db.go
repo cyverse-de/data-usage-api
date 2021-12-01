@@ -84,6 +84,7 @@ func (d *DEDatabase) UserCurrentDataUsage(context context.Context, username stri
 	sql, args, err := psql.Select("d.id", "d.total", "d.user_id", "u.username", "d.time AT TIME ZONE (select current_setting('TIMEZONE')) AS time", "d.last_modified AT TIME ZONE (select current_setting('TIMEZONE')) AS last_modified").
 		From(fmt.Sprintf("%s d", d.Table("user_data_usage"))).
 		Join(fmt.Sprintf("%s u ON d.user_id = u.id", d.Table("users"))).
+		Where("u.username = ?", username).
 		OrderBy("d.time DESC").
 		Limit(1).
 		ToSql()
