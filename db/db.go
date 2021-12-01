@@ -84,20 +84,16 @@ func (d *DEDatabase) baseUserUsageSelect() squirrel.SelectBuilder {
 		Join(fmt.Sprintf("%s ON (d.user_id = u.id)", d.Table("users", "u")))
 }
 
-func (d *DEDatabase) UserCurrentDataUsage(context context.Context, username string) (*UserDataUsage, error) {
+func (d *DEDatabase) doUserUsage(context context.Context, query squirrel.Sqlizer) (*UserDataUsage, error) {
 	var usage UserDataUsage
 
-	log.Tracef("Getting data usage for %s", username)
+	sql, args, err := query.ToSql()
 
-	sql, args, err := d.baseUserUsageSelect().
-		OrderBy("d.time DESC").
-		Limit(1).
-		ToSql()
 	if err != nil {
 		return nil, errors.Wrap(err, "Error formatting SQL query")
 	}
 
-	log.Tracef("%s, %+v", sql, args)
+	log.Tracef("doUserUsage SQL: %s, %+v", sql, args)
 
 	err = d.db.GetContext(context, &usage, sql, args...)
 	if err != nil {
@@ -107,10 +103,20 @@ func (d *DEDatabase) UserCurrentDataUsage(context context.Context, username stri
 	return &usage, err
 }
 
+func (d *DEDatabase) UserCurrentDataUsage(context context.Context, username string) (*UserDataUsage, error) {
+	log.Tracef("Getting data usage for %s", username)
+
+	query := d.baseUserUsageSelect().
+		OrderBy("d.time DESC").
+		Limit(1)
+
+	return d.doUserUsage(context, query)
+}
+
 func (d *DEDatabase) AddUserDataUsage(context context.Context, username string, total int64, time time.Time) (*UserDataUsage, error) {
 	log.Tracef("Inserting for %s: %d at %s", username, total, time)
 
-	sql, args, err := psql.Insert(d.Table("user_data_usage", "d")).
+	query := psql.Insert(d.Table("user_data_usage", "d")).
 		Columns("total", "time", "user_id").
 		Select(psql.Select().
 			Column("? AS total", total).
@@ -119,21 +125,7 @@ func (d *DEDatabase) AddUserDataUsage(context context.Context, username string, 
 			From(d.Table("users", "u")).
 			Where("username = ?", username),
 		).
-		Suffix("RETURNING d.id, d.total, d.user_id, (SELECT username from users WHERE id = d.user_id) as username, d.time AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS time, d.last_modified AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS last_modified").
-		ToSql()
+		Suffix("RETURNING d.id, d.total, d.user_id, (SELECT username from users WHERE id = d.user_id) as username, d.time AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS time, d.last_modified AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS last_modified")
 
-	if err != nil {
-		return nil, errors.Wrap(err, "Error formatting SQL query")
-	}
-
-	log.Tracef("%s, %+v", sql, args)
-
-	var usage UserDataUsage
-	err = d.db.GetContext(context, &usage, sql, args...)
-
-	if err != nil {
-		return nil, errors.Wrap(err, "Error running query")
-	}
-
-	return &usage, err
+	return d.doUserUsage(context, query)
 }
