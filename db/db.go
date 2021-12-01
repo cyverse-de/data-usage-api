@@ -129,7 +129,7 @@ func (d *DEDatabase) AddUserDataUsage(context context.Context, username string, 
 	log.Tracef("%s, %+v", sql, args)
 
 	var usage UserDataUsage
-	err = d.db.QueryRowxContext(context, sql, args...).StructScan(&usage)
+	err = d.db.GetContext(context, &usage, sql, args...)
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Error running query")
