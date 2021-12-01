@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"time"
 
@@ -40,16 +41,18 @@ func (d *DEDatabase) baseUserUsageSelect() squirrel.SelectBuilder {
 func (d *DEDatabase) doUserUsage(context context.Context, query squirrel.Sqlizer) (*UserDataUsage, error) {
 	var usage UserDataUsage
 
-	sql, args, err := query.ToSql()
+	querys, args, err := query.ToSql()
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Error formatting SQL query")
 	}
 
-	log.Tracef("doUserUsage SQL: %s, %+v", sql, args)
+	log.Tracef("doUserUsage SQL: %s, %+v", querys, args)
 
-	err = d.db.GetContext(context, &usage, sql, args...)
-	if err != nil {
+	err = d.db.GetContext(context, &usage, querys, args...)
+	if err == sql.ErrNoRows {
+		return nil, err
+	} else if err != nil {
 		return nil, errors.Wrap(err, "Error running query")
 	}
 
