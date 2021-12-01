@@ -75,6 +75,7 @@ func (d *DEDatabase) UserCurrentDataUsage(context context.Context, username stri
 	log.Tracef("Getting data usage for %s", username)
 
 	query := d.baseUserUsageSelect().
+		Where("u.username = ?", username).
 		OrderBy("d.time DESC").
 		Limit(1)
 
