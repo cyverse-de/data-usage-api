@@ -46,38 +46,6 @@ func (d *DEDatabase) Table(name, alias string) string {
 	return fmt.Sprintf("%s.%s AS %s", d.schema, name, alias)
 }
 
-func (d *DEDatabase) Username(context context.Context, userID string) (string, error) {
-	var username string
-
-	sql, args, err := psql.Select("username").From(d.Table("users", "u")).Where("id = ?", userID).ToSql()
-	if err != nil {
-		return "", err
-	}
-
-	err = d.db.QueryRowxContext(context, sql, args...).Scan(&username)
-	if err != nil {
-		return "", err
-	}
-
-	return username, nil
-}
-
-func (d *DEDatabase) UserID(context context.Context, username string) (string, error) {
-	var userID string
-
-	sql, args, err := psql.Select("id").From(d.Table("users", "u")).Where("username = ?", username).ToSql()
-	if err != nil {
-		return "", err
-	}
-
-	err = d.db.QueryRowxContext(context, sql, args...).Scan(&userID)
-	if err != nil {
-		return "", err
-	}
-
-	return userID, nil
-}
-
 func (d *DEDatabase) baseUserUsageSelect() squirrel.SelectBuilder {
 	return psql.Select("d.id", "d.total", "d.user_id", "u.username", "d.time AT TIME ZONE (select current_setting('TIMEZONE')) AS time", "d.last_modified AT TIME ZONE (select current_setting('TIMEZONE')) AS last_modified").
 		From(d.Table("user_data_usage", "d")).
