@@ -5,14 +5,18 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/cyverse-de/configurate"
 	"github.com/cyverse-de/data-usage-api/api"
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/logging"
+	"github.com/cyverse-de/messaging"
 	"github.com/jmoiron/sqlx"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"github.com/streadway/amqp"
 
 	_ "github.com/lib/pq"
 )
@@ -36,7 +40,21 @@ icat:
 
 users:
   domain: example.com
+
+amqp:
+  uri: amqp://guest:guest@rabbit:5672/
+  queue_prefix: ""
+  exchange:
+    name: de
+    type: topic
 `
+
+func getQueueName(prefix string) string {
+	if len(prefix) > 0 {
+		return fmt.Sprintf("%s.data-usage-api", prefix)
+	}
+	return "data-usage-api"
+}
 
 func main() {
 	var (
@@ -73,11 +91,55 @@ func main() {
 	icatconn = sqlx.MustConnect("postgres", configuration.ICATURI)
 
 	// configure and start AMQP bits here
+	listenClient, err := messaging.NewClient(configuration.AMQPURI, true)
+	if err != nil {
+		log.Fatal(errors.Wrap(err, "Unable to create the messaging listen client"))
+	}
+	defer listenClient.Close()
+
+	publishClient, err := messaging.NewClient(configuration.AMQPURI, true)
+	if err != nil {
+		log.Fatal(errors.Wrap(err, "Unable to create the messaging publish client"))
+	}
+	defer publishClient.Close()
+
+	err = publishClient.SetupPublishing(configuration.AMQPExchangeName)
+	if err != nil {
+		log.Fatal(errors.Wrap(err, "Unable to set up message publishing"))
+	}
+
+	go listenClient.Listen()
+
+	queueName := getQueueName(configuration.AMQPQueuePrefix)
+	listenClient.AddConsumerMulti(
+		configuration.AMQPExchangeName,
+		configuration.AMQPExchangeType,
+		queueName,
+		[]string{"index.all", "index.usage.data", "index.usage.data.batch.user.#", "index.usage.data.user.#"},
+		func(del amqp.Delivery) {
+			var err error
+			log.Tracef("Got message: %s", del.RoutingKey)
+			if del.RoutingKey == "index.all" || del.RoutingKey == "index.usage.data" {
+				// generate prefixes and publish
+			} else if strings.HasPrefix(del.RoutingKey, "index.usage.data.batch.user") {
+				// handle batch
+			} else if strings.HasPrefix(del.RoutingKey, "index.usage.data.user") {
+				// handle single user
+			}
+			if err != nil {
+				return
+			}
+			err = del.Ack(false)
+			if err != nil {
+				log.Error(errors.Wrap(err, fmt.Sprintf("Error acknowledging message: %s", del.RoutingKey)))
+			}
+		},
+		1)
 	// - listen for index.all (for convenience) and index.usage.data, and fetch all applicable users, batch them, and send out batch messages - start-of-batch usernames can have no dots so routing keys work
 	// - listen for index.usage.data.batch.user.<start>.<end>, and update the usage information for users from <start> to <end>, inclusive
 	// - listen for index.usage.data.user.<username>, and update the usage information for just that user
 
-	app = api.New(dbconn, icatconn, configuration)
+	app = api.New(dbconn, icatconn, publishClient, configuration)
 
 	log.Infof("listening on port %d", *listenPort)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), app.Router()))

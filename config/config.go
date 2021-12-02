@@ -17,6 +17,11 @@ type Config struct {
 
 	UserSuffix      string
 	RefreshInterval *time.Duration
+
+	AMQPURI          string
+	AMQPExchangeName string
+	AMQPExchangeType string
+	AMQPQueuePrefix  string
 }
 
 func NewFromViper(cfg *viper.Viper) (*Config, error) {
@@ -32,6 +37,10 @@ func NewFromViper(cfg *viper.Viper) (*Config, error) {
 		RootResourceNames: cfg.GetStringSlice("icat.rootResources"),
 		UserSuffix:        cfg.GetString("users.domain"),
 		RefreshInterval:   &ri,
+		AMQPURI:           cfg.GetString("amqp.uri"),
+		AMQPExchangeName:  cfg.GetString("amqp.exchange.name"),
+		AMQPExchangeType:  cfg.GetString("amqp.exchange.type"),
+		AMQPQueuePrefix:   cfg.GetString("amqp.queue_prefix"),
 	}
 
 	err = c.Validate()
@@ -68,6 +77,18 @@ func (c *Config) Validate() error {
 
 	if c.RefreshInterval == nil {
 		return errors.New("refresh interval must be set")
+	}
+
+	if c.AMQPURI == "" {
+		return errors.New("amqp.uri must be set")
+	}
+
+	if c.AMQPExchangeName == "" {
+		return errors.New("amqp.exchange.name must be set")
+	}
+
+	if c.AMQPExchangeType == "" {
+		return errors.New("amqp.exchange.type must be set")
 	}
 
 	return nil

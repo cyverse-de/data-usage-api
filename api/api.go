@@ -6,6 +6,7 @@ import (
 
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/logging"
+	"github.com/cyverse-de/messaging"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
@@ -18,10 +19,11 @@ type App struct {
 	dedb          *sqlx.DB
 	icat          *sqlx.DB
 	router        *echo.Echo
+	amqp          *messaging.Client
 	configuration *config.Config
 }
 
-func New(dedb *sqlx.DB, icat *sqlx.DB, configuration *config.Config) *App {
+func New(dedb *sqlx.DB, icat *sqlx.DB, amqp *messaging.Client, configuration *config.Config) *App {
 	return &App{
 		dedb:          dedb,
 		icat:          icat,
