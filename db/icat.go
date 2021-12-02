@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
@@ -108,7 +109,7 @@ func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username st
 	}
 
 	// should this additionally return a timestamp, or even a semi-complete UserDataUsage object?
-	sql, args, err := psql.Select().
+	querys, args, err := psql.Select().
 		Column("SUM(d.data_size) AS file_volume").
 		From("r_user_main AS u").
 		Join("user_colls AS c ON c.user_name = u.user_name").
@@ -124,24 +125,15 @@ func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username st
 		return 0, errors.Wrap(err, "Error formatting user data usage query")
 	}
 
-	log.Tracef("UserCurrentDataUsage SQL: %s, %+v", sql, args)
+	log.Tracef("UserCurrentDataUsage SQL: %s, %+v", querys, args)
 
 	var usage int64
-	err = i.db.GetContext(context, &usage, sql, args...)
-	if err != nil {
+	err = i.db.GetContext(context, &usage, querys, args...)
+	if err == sql.ErrNoRows {
+		return 0, err
+	} else if err != nil {
 		return 0, errors.Wrap(err, "Error running query")
 	}
 
 	return usage, nil
 }
-
-//func UserCurrentDataUsageDB(db *sqlx.DB, context context.Context, username string) (int64, error) {
-//	tx, err := db.BeginTxx(context, nil)
-//	if err != nil {
-//		return 0, errors.Wrap(err, "Error starting transaction")
-//	}
-//	defer rollbackTxLogError(tx)
-//
-//	i := NewICAT(tx)
-//	return i.UserCurrentDataUsage(context, username)
-//}

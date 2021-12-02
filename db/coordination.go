@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/jmoiron/sqlx"
@@ -56,7 +57,10 @@ func NewBothTx(context context.Context, deconn *sqlx.DB, deschema string, icatco
 
 func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username string) (*UserDataUsage, error) {
 	usagenum, err := b.icatdb.UserCurrentDataUsage(context, username)
-	if err != nil {
+	if err == sql.ErrNoRows {
+		usagenum = 0
+		log.Infof("No usage information was found for user %s. Attempting to add a usage of 0 anyway.", username)
+	} else if err != nil {
 		return nil, errors.Wrap(err, "Error getting current data usage")
 	}
 
