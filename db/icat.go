@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/Masterminds/squirrel"
-	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 )
 
@@ -15,13 +14,6 @@ type ICATDatabase struct {
 	userSuffix        string
 	zone              string
 	rootResourceNames []string
-}
-
-func rollbackTxLogError(tx *sqlx.Tx) {
-	err := tx.Rollback()
-	if err != nil && err.Error() != "sql: transaction has already been committed or rolled back" {
-		log.Error(errors.Wrap(err, "Error rolling back transaction"))
-	}
 }
 
 func NewICAT(db DatabaseAccessor, userSuffix, zone string, rootResourceNames []string) *ICATDatabase {
