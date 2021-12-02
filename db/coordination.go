@@ -59,7 +59,7 @@ func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username st
 	usagenum, err := b.icatdb.UserCurrentDataUsage(context, username)
 	if err == sql.ErrNoRows {
 		usagenum = 0
-		log.Infof("No usage information was found for user %s. Attempting to add a usage of 0 anyway.", username)
+		log.Infof("No usage information was found for user %s. Attempting to add a usage of 0 anyway", username)
 	} else if err != nil {
 		return nil, errors.Wrap(err, "Error getting current data usage")
 	}
@@ -67,5 +67,13 @@ func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username st
 	// if this update shouldn't be added, or should amend a prior reading, do it here or in the method called below
 	// or maybe have an async cleanup process that deduplicates readings
 
-	return b.dedb.AddUserDataUsage(context, username, usagenum, time.Now())
+	res, err := b.dedb.AddUserDataUsage(context, username, usagenum, time.Now())
+	if err == sql.ErrNoRows {
+		e := errors.Wrap(err, "No data could be inserted. Perhaps the user doesn't exist in the DE database")
+		log.Error(e)
+		return nil, e
+
+	}
+
+	return res, err
 }
