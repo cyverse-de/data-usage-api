@@ -27,19 +27,19 @@ func (a *App) UserCurrentUsageHandler(c echo.Context) error {
 
 	res, err := dedb.UserCurrentDataUsage(context, user)
 
-	// if the user's usage information is older than the refresh interval, asynchronously update it
-	if res.Time.Add(*a.configuration.RefreshInterval).Before(time.Now()) {
-		// enqueue async update
-		log.Tracef("Enqueuing update message for %s", user)
-		a.amqp.Publish(fmt.Sprintf("index.usage.data.user.%s", strings.TrimSuffix(user, "@"+a.configuration.UserSuffix)), []byte{})
-	}
-
 	if err == sql.ErrNoRows {
 		return logging.ErrorResponse{Message: "No data usage information found for user", ErrorCode: "404", HTTPStatusCode: http.StatusNotFound}
 	} else if err != nil {
 		e := errors.Wrap(err, "Failed fetching current usage")
 		log.Error(e)
 		return logging.ErrorResponse{Message: e.Error(), ErrorCode: "500", HTTPStatusCode: http.StatusInternalServerError}
+	}
+
+	// if the user's usage information is older than the refresh interval, asynchronously update it
+	if res.Time.Add(*a.configuration.RefreshInterval).Before(time.Now()) {
+		// enqueue async update
+		log.Tracef("Enqueuing update message for %s", user)
+		a.amqp.Publish(fmt.Sprintf("index.usage.data.user.%s", strings.TrimSuffix(user, "@"+a.configuration.UserSuffix)), []byte{})
 	}
 
 	return c.JSON(http.StatusOK, res)
