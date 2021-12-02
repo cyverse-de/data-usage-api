@@ -11,9 +11,10 @@ import (
 )
 
 type ICATDatabase struct {
-	db         DatabaseAccessor
-	userSuffix string
-	zone       string
+	db                DatabaseAccessor
+	userSuffix        string
+	zone              string
+	rootResourceNames []string
 }
 
 func rollbackTxLogError(tx *sqlx.Tx) {
@@ -23,12 +24,12 @@ func rollbackTxLogError(tx *sqlx.Tx) {
 	}
 }
 
-func NewICAT(db DatabaseAccessor, userSuffix, zone string) *ICATDatabase {
-	return &ICATDatabase{db: db, userSuffix: userSuffix, zone: zone}
+func NewICAT(db DatabaseAccessor, userSuffix, zone string, rootResourceNames []string) *ICATDatabase {
+	return &ICATDatabase{db: db, userSuffix: userSuffix, zone: zone, rootResourceNames: rootResourceNames}
 }
 
 func (i *ICATDatabase) UnqualifiedUsername(username string) string {
-	return strings.TrimSuffix(username, i.userSuffix)
+	return strings.TrimSuffix(username, "@"+i.userSuffix)
 }
 
 func (i *ICATDatabase) createStorageRootMapping(context context.Context) error {
@@ -90,7 +91,8 @@ SELECT CASE WHEN coll_name LIKE '/' || $1 || '/home/%' THEN REGEXP_REPLACE(coll_
 	return nil
 }
 
-func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username string, rootResourceNames []string) (int64, error) {
+func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username string) (int64, error) {
+	u := i.UnqualifiedUsername(username)
 	// We should have a Tx here, or this will behave badly. Not sure how to ensure that/if it's possible to.
 
 	err := i.createStorageRootMapping(context)
@@ -98,7 +100,7 @@ func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username st
 		return 0, err
 	}
 
-	err = i.createSpecificUserColls(context, username)
+	err = i.createSpecificUserColls(context, u)
 	if err != nil {
 		return 0, err
 	}
@@ -107,7 +109,7 @@ func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username st
 	resourceQuery, resourceArgs, err := squirrel.Select("storage_id").
 		From("storage_root_mapping").
 		//Where(squirrel.Eq{"root_name": []string{"CyVerseRes", "taccCorralRes", "taccRes"}}).
-		Where(squirrel.Eq{"root_name": rootResourceNames}).
+		Where(squirrel.Eq{"root_name": i.rootResourceNames}).
 		ToSql()
 
 	if err != nil {
@@ -122,7 +124,7 @@ func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username st
 		Join("r_data_main AS d ON d.coll_id = c.coll_id").
 		Where(squirrel.Eq{"u.user_type_name": "rodsuser"}).
 		Where(fmt.Sprintf("d.resc_id = ANY(ARRAY(%s))", resourceQuery), resourceArgs...).
-		Where(squirrel.Eq{"u.user_name": username}).
+		Where(squirrel.Eq{"u.user_name": u}).
 		GroupBy("u.user_name").
 		Limit(1).
 		ToSql()

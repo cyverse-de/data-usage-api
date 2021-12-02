@@ -15,7 +15,7 @@ func (a *App) UserCurrentUsageHandler(c echo.Context) error {
 
 	user := c.Param("username")
 	if user == "" {
-		return echo.NewHTTPError(http.StatusBadRequest, errors.New("No username provided"))
+		return logging.ErrorResponse{Message: "No username provided", ErrorCode: "400", HTTPStatusCode: http.StatusBadRequest}
 	}
 	user = a.FixUsername(user)
 

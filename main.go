@@ -26,6 +26,7 @@ db:
 
 icat:
   uri: postgres://ICAT:fakepassword@icat-db:5432/ICAT?sslmode=disable
+  zone: iplant
   rootResources:
     - mainIngestRes
     - mainReplRes
@@ -79,6 +80,11 @@ func main() {
 		log.Fatal("users.domain must be set in the configuration file")
 	}
 
+	zone := config.GetString("icat.zone")
+	if zone == "" {
+		log.Fatal("icat.zone must be set in the configuration file")
+	}
+
 	rootResourceNames := config.GetStringSlice("icat.rootResources")
 	if rootResourceNames == nil {
 		log.Fatal("icat.rootResources must be set in the configuration file")
@@ -93,48 +99,7 @@ func main() {
 	dbconn = sqlx.MustConnect("postgres", dbURI)
 	icatconn = sqlx.MustConnect("postgres", icatURI)
 
-	app := api.New(dbconn, dbSchema, icatconn, userSuffix)
-
-	//workerConfig := worker.Config{
-	//	Name:                    strings.ReplaceAll(uuid.New().String(), "-", ""),
-	//	ExpirationInterval:      workerLifetime,
-	//	RefreshInterval:         refreshInterval,
-	//	WorkerPurgeInterval:     purgeWorkersInterval,
-	//	WorkSeekerPurgeInterval: purgeSeekersInterval,
-	//	WorkClaimPurgeInterval:  purgeClaimsInterval,
-	//	ClaimLifetime:           claimLifetime,
-	//	WorkSeekingLifetime:     seekingLifetime,
-	//	NewUserTotalInterval:    newUserTotalInterval,
-	//}
-
-	//log.Infof("worker name is %s", workerConfig.Name)
-
-	//w, err := worker.New(context.Background(), &workerConfig, dbconn)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-
-	//log.Infof("worker ID is %s", w.ID)
-
-	//go w.Start(context.Background())
-
-	//dedb := db.NewDE(dbconn, dbSchema)
-	//usage, err := dedb.AddUserDataUsage(context.Background(), "mian@iplantcollaborative.org", 12345678, time.Now())
-	//if err != nil {
-	//	log.Info(err)
-	//}
-	//log.Info(usage)
-
-	//icattx, err := icatconn.BeginTxx(context.Background(), nil)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//icatdb := db.NewICAT(icattx, userSuffix, "cyverse")
-	//usage, err := icatdb.UserCurrentDataUsage(context.Background(), "mian", rootResourceNames)
-	//if err != nil {
-	//	log.Error(err)
-	//}
-	//log.Info(usage)
+	app := api.New(dbconn, dbSchema, icatconn, userSuffix, zone, rootResourceNames)
 
 	log.Infof("listening on port %d", *listenPort)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), app.Router()))

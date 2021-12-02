@@ -14,20 +14,24 @@ import (
 var log = logging.Log.WithFields(logrus.Fields{"package": "api"})
 
 type App struct {
-	dedb       *sqlx.DB
-	schema     string
-	icat       *sqlx.DB
-	router     *echo.Echo
-	userSuffix string
+	dedb              *sqlx.DB
+	schema            string
+	icat              *sqlx.DB
+	router            *echo.Echo
+	userSuffix        string
+	zone              string
+	rootResourceNames []string
 }
 
-func New(dedb *sqlx.DB, schema string, icat *sqlx.DB, userSuffix string) *App {
+func New(dedb *sqlx.DB, schema string, icat *sqlx.DB, userSuffix, zone string, rootResourceNames []string) *App {
 	return &App{
-		dedb:       dedb,
-		schema:     schema,
-		icat:       icat,
-		router:     echo.New(),
-		userSuffix: userSuffix,
+		dedb:              dedb,
+		schema:            schema,
+		icat:              icat,
+		router:            echo.New(),
+		userSuffix:        userSuffix,
+		zone:              zone,
+		rootResourceNames: rootResourceNames,
 	}
 }
 
@@ -44,6 +48,7 @@ func (a *App) Router() *echo.Echo {
 
 	userdata := a.router.Group("/:username/data")
 	userdata.GET("/current", a.UserCurrentUsageHandler)
+	userdata.POST("/update", a.UpdateUserCurrentUsageHandler)
 
 	return a.router
 }
