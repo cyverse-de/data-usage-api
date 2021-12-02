@@ -1,9 +1,6 @@
 package api
 
 import (
-	"fmt"
-	"strings"
-
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/logging"
 	"github.com/cyverse-de/messaging"
@@ -28,15 +25,9 @@ func New(dedb *sqlx.DB, icat *sqlx.DB, amqp *messaging.Client, configuration *co
 		dedb:          dedb,
 		icat:          icat,
 		router:        echo.New(),
+		amqp:          amqp,
 		configuration: configuration,
 	}
-}
-
-func (a *App) FixUsername(username string) string {
-	if !strings.HasSuffix(username, a.configuration.UserSuffix) {
-		return fmt.Sprintf("%s@%s", username, a.configuration.UserSuffix)
-	}
-	return username
 }
 
 func (a *App) Router() *echo.Echo {

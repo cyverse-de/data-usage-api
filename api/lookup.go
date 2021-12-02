@@ -2,11 +2,14 @@ package api
 
 import (
 	"database/sql"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/cyverse-de/data-usage-api/db"
 	"github.com/cyverse-de/data-usage-api/logging"
+	"github.com/cyverse-de/data-usage-api/util"
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 )
@@ -18,9 +21,7 @@ func (a *App) UserCurrentUsageHandler(c echo.Context) error {
 	if user == "" {
 		return logging.ErrorResponse{Message: "No username provided", ErrorCode: "400", HTTPStatusCode: http.StatusBadRequest}
 	}
-	user = a.FixUsername(user)
-
-	log.Debugf("username: %s", user)
+	user = util.FixUsername(user, a.configuration)
 
 	dedb := db.NewDE(a.dedb, a.configuration.DBSchema)
 
@@ -29,6 +30,8 @@ func (a *App) UserCurrentUsageHandler(c echo.Context) error {
 	// if the user's usage information is older than the refresh interval, asynchronously update it
 	if res.Time.Add(*a.configuration.RefreshInterval).Before(time.Now()) {
 		// enqueue async update
+		log.Tracef("Enqueuing update message for %s", user)
+		a.amqp.Publish(fmt.Sprintf("index.usage.data.user.%s", strings.TrimSuffix(user, "@"+a.configuration.UserSuffix)), []byte{})
 	}
 
 	if err == sql.ErrNoRows {

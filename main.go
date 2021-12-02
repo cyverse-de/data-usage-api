@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/cyverse-de/configurate"
+	a "github.com/cyverse-de/data-usage-api/amqp"
 	"github.com/cyverse-de/data-usage-api/api"
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/logging"
@@ -103,6 +104,7 @@ func main() {
 	}
 	defer publishClient.Close()
 
+	log.Info(configuration.AMQPExchangeName)
 	err = publishClient.SetupPublishing(configuration.AMQPExchangeName)
 	if err != nil {
 		log.Fatal(errors.Wrap(err, "Unable to set up message publishing"))
@@ -115,7 +117,7 @@ func main() {
 		configuration.AMQPExchangeName,
 		configuration.AMQPExchangeType,
 		queueName,
-		[]string{"index.all", "index.usage.data", "index.usage.data.batch.user.#", "index.usage.data.user.#"},
+		[]string{"index.all", "index.usage.data", "index.usage.data.batch.user.#", a.SingleUserPrefix + ".#"},
 		func(del amqp.Delivery) {
 			var err error
 			log.Tracef("Got message: %s", del.RoutingKey)
@@ -123,8 +125,8 @@ func main() {
 				// generate prefixes and publish
 			} else if strings.HasPrefix(del.RoutingKey, "index.usage.data.batch.user") {
 				// handle batch
-			} else if strings.HasPrefix(del.RoutingKey, "index.usage.data.user") {
-				// handle single user
+			} else if strings.HasPrefix(del.RoutingKey, a.SingleUserPrefix) {
+				err = a.UpdateUserHandler(del, dbconn, icatconn, configuration)
 			}
 			if err != nil {
 				return

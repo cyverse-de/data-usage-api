@@ -5,6 +5,7 @@ import (
 
 	"github.com/cyverse-de/data-usage-api/db"
 	"github.com/cyverse-de/data-usage-api/logging"
+	"github.com/cyverse-de/data-usage-api/util"
 	"github.com/labstack/echo/v4"
 	"github.com/pkg/errors"
 )
@@ -16,7 +17,7 @@ func (a *App) UpdateUserCurrentUsageHandler(c echo.Context) error {
 	if user == "" {
 		return logging.ErrorResponse{Message: "No username provided", ErrorCode: "400", HTTPStatusCode: http.StatusBadRequest}
 	}
-	user = a.FixUsername(user)
+	user = util.FixUsername(user, a.configuration)
 
 	dbs, rb, commit, err := db.NewBothTx(context, a.dedb, a.configuration.DBSchema, a.icat, a.configuration.UserSuffix, a.configuration.Zone, a.configuration.RootResourceNames)
 	if err != nil {
