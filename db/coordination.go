@@ -60,5 +60,8 @@ func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username st
 		return nil, errors.Wrap(err, "Error getting current data usage")
 	}
 
+	// if this update shouldn't be added, or should amend a prior reading, do it here or in the method called below
+	// or maybe have an async cleanup process that deduplicates readings
+
 	return b.dedb.AddUserDataUsage(context, username, usagenum, time.Now())
 }

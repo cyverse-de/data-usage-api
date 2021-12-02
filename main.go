@@ -72,6 +72,11 @@ func main() {
 	dbconn = sqlx.MustConnect("postgres", configuration.DBURI)
 	icatconn = sqlx.MustConnect("postgres", configuration.ICATURI)
 
+	// configure and start AMQP bits here
+	// - listen for index.all (for convenience) and index.usage.data, and fetch all applicable users, batch them, and send out batch messages - start-of-batch usernames can have no dots so routing keys work
+	// - listen for index.usage.data.batch.user.<start>.<end>, and update the usage information for users from <start> to <end>, inclusive
+	// - listen for index.usage.data.user.<username>, and update the usage information for just that user
+
 	app = api.New(dbconn, icatconn, configuration)
 
 	log.Infof("listening on port %d", *listenPort)

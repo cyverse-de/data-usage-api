@@ -100,7 +100,6 @@ func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username st
 	// use plain squirrel here to retain ?-style args for embedding in the next query
 	resourceQuery, resourceArgs, err := squirrel.Select("storage_id").
 		From("storage_root_mapping").
-		//Where(squirrel.Eq{"root_name": []string{"CyVerseRes", "taccCorralRes", "taccRes"}}).
 		Where(squirrel.Eq{"root_name": i.rootResourceNames}).
 		ToSql()
 
@@ -108,8 +107,8 @@ func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username st
 		return 0, err
 	}
 
+	// should this additionally return a timestamp, or even a semi-complete UserDataUsage object?
 	sql, args, err := psql.Select().
-		//Column("u.user_name").
 		Column("SUM(d.data_size) AS file_volume").
 		From("r_user_main AS u").
 		Join("user_colls AS c ON c.user_name = u.user_name").

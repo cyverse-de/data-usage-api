@@ -3,6 +3,7 @@ package api
 import (
 	"database/sql"
 	"net/http"
+	"time"
 
 	"github.com/cyverse-de/data-usage-api/db"
 	"github.com/cyverse-de/data-usage-api/logging"
@@ -24,6 +25,11 @@ func (a *App) UserCurrentUsageHandler(c echo.Context) error {
 	dedb := db.NewDE(a.dedb, a.configuration.DBSchema)
 
 	res, err := dedb.UserCurrentDataUsage(context, user)
+
+	// if the user's usage information is older than the refresh interval, asynchronously update it
+	if res.Time.Add(*a.configuration.RefreshInterval).Before(time.Now()) {
+		// enqueue async update
+	}
 
 	if err == sql.ErrNoRows {
 		return logging.ErrorResponse{Message: "No data usage information found for user", ErrorCode: "404", HTTPStatusCode: http.StatusNotFound}
