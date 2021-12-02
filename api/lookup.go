@@ -39,7 +39,10 @@ func (a *App) UserCurrentUsageHandler(c echo.Context) error {
 	if res.Time.Add(*a.configuration.RefreshInterval).Before(time.Now()) {
 		// enqueue async update
 		log.Tracef("Enqueuing update message for %s", user)
-		a.amqp.Publish(fmt.Sprintf("index.usage.data.user.%s", strings.TrimSuffix(user, "@"+a.configuration.UserSuffix)), []byte{})
+		err = a.amqp.Publish(fmt.Sprintf("index.usage.data.user.%s", strings.TrimSuffix(user, "@"+a.configuration.UserSuffix)), []byte{})
+		if err != nil {
+			log.Error(errors.Wrap(err, "Failed enqueuing update message"))
+		}
 	}
 
 	return c.JSON(http.StatusOK, res)
