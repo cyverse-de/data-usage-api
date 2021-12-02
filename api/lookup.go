@@ -28,6 +28,11 @@ func (a *App) UserCurrentUsageHandler(c echo.Context) error {
 	res, err := dedb.UserCurrentDataUsage(context, user)
 
 	if err == sql.ErrNoRows {
+		log.Tracef("Enqueuing update message for %s", user)
+		err = a.amqp.Publish(fmt.Sprintf("index.usage.data.user.%s", strings.TrimSuffix(user, "@"+a.configuration.UserSuffix)), []byte{})
+		if err != nil {
+			log.Error(errors.Wrap(err, "Failed enqueuing update message"))
+		}
 		return logging.ErrorResponse{Message: "No data usage information found for user", ErrorCode: "404", HTTPStatusCode: http.StatusNotFound}
 	} else if err != nil {
 		e := errors.Wrap(err, "Failed fetching current usage")
