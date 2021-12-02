@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/logging"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
@@ -14,30 +15,24 @@ import (
 var log = logging.Log.WithFields(logrus.Fields{"package": "api"})
 
 type App struct {
-	dedb              *sqlx.DB
-	schema            string
-	icat              *sqlx.DB
-	router            *echo.Echo
-	userSuffix        string
-	zone              string
-	rootResourceNames []string
+	dedb          *sqlx.DB
+	icat          *sqlx.DB
+	router        *echo.Echo
+	configuration *config.Config
 }
 
-func New(dedb *sqlx.DB, schema string, icat *sqlx.DB, userSuffix, zone string, rootResourceNames []string) *App {
+func New(dedb *sqlx.DB, icat *sqlx.DB, configuration *config.Config) *App {
 	return &App{
-		dedb:              dedb,
-		schema:            schema,
-		icat:              icat,
-		router:            echo.New(),
-		userSuffix:        userSuffix,
-		zone:              zone,
-		rootResourceNames: rootResourceNames,
+		dedb:          dedb,
+		icat:          icat,
+		router:        echo.New(),
+		configuration: configuration,
 	}
 }
 
 func (a *App) FixUsername(username string) string {
-	if !strings.HasSuffix(username, a.userSuffix) {
-		return fmt.Sprintf("%s@%s", username, a.userSuffix)
+	if !strings.HasSuffix(username, a.configuration.UserSuffix) {
+		return fmt.Sprintf("%s@%s", username, a.configuration.UserSuffix)
 	}
 	return username
 }

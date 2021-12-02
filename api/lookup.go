@@ -21,7 +21,7 @@ func (a *App) UserCurrentUsageHandler(c echo.Context) error {
 
 	log.Debugf("username: %s", user)
 
-	dedb := db.NewDE(a.dedb, a.schema)
+	dedb := db.NewDE(a.dedb, a.configuration.DBSchema)
 
 	res, err := dedb.UserCurrentDataUsage(context, user)
 

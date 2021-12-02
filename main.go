@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
 
 	"github.com/cyverse-de/configurate"
 	"github.com/cyverse-de/data-usage-api/api"
+	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/logging"
 	"github.com/jmoiron/sqlx"
 	"github.com/sirupsen/logrus"
@@ -20,6 +20,9 @@ import (
 var log = logging.Log.WithFields(logrus.Fields{"package": "main"})
 
 const defaultConfig = `
+dataUsageApi:
+  refreshInterval: 3h
+
 db:
   uri: postgres://de:notprod@dedb:5432/de?sslmode=disable
   schema: public
@@ -37,15 +40,16 @@ users:
 
 func main() {
 	var (
-		err      error
-		config   *viper.Viper
-		dbconn   *sqlx.DB
-		icatconn *sqlx.DB
+		err           error
+		cfg           *viper.Viper
+		dbconn        *sqlx.DB
+		icatconn      *sqlx.DB
+		configuration *config.Config
+		app           *api.App
 
-		configPath          = flag.String("config", "/etc/iplant/de/data-usage-api.yml", "Full path to the configuration file")
-		listenPort          = flag.Int("port", 60000, "The port the service listens on for requests")
-		logLevel            = flag.String("log-level", "info", "One of trace, debug, info, warn, error, fatal, or panic.")
-		refreshIntervalFlag = flag.String("refresh-interval", "3h", "The time between full re-scans of the data store. Must parse as a time.Duration.")
+		configPath = flag.String("config", "/etc/iplant/de/data-usage-api.yml", "Full path to the configuration file")
+		listenPort = flag.Int("port", 60000, "The port the service listens on for requests")
+		logLevel   = flag.String("log-level", "info", "One of trace, debug, info, warn, error, fatal, or panic.")
 	)
 
 	flag.Parse()
@@ -54,52 +58,21 @@ func main() {
 	log.Infof("config path is %s", *configPath)
 	log.Infof("listen port is %d", *listenPort)
 
-	config, err = configurate.InitDefaults(*configPath, defaultConfig)
+	cfg, err = configurate.InitDefaults(*configPath, defaultConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Infof("done reading configuration from %s", *configPath)
 
-	dbURI := config.GetString("db.uri")
-	if dbURI == "" {
-		log.Fatal("db.uri must be set in the configuration file")
-	}
-
-	dbSchema := config.GetString("db.schema")
-	if dbSchema == "" {
-		log.Fatal("db.schema must be set in the configuration file")
-	}
-
-	icatURI := config.GetString("icat.uri")
-	if icatURI == "" {
-		log.Fatal("icat.uri must be set in the configuration file")
-	}
-
-	userSuffix := config.GetString("users.domain")
-	if userSuffix == "" {
-		log.Fatal("users.domain must be set in the configuration file")
-	}
-
-	zone := config.GetString("icat.zone")
-	if zone == "" {
-		log.Fatal("icat.zone must be set in the configuration file")
-	}
-
-	rootResourceNames := config.GetStringSlice("icat.rootResources")
-	if rootResourceNames == nil {
-		log.Fatal("icat.rootResources must be set in the configuration file")
-	}
-
-	//refreshInterval, err := time.ParseDuration(*refreshIntervalFlag)
-	_, err = time.ParseDuration(*refreshIntervalFlag)
+	configuration, err = config.NewFromViper(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	dbconn = sqlx.MustConnect("postgres", dbURI)
-	icatconn = sqlx.MustConnect("postgres", icatURI)
+	dbconn = sqlx.MustConnect("postgres", configuration.DBURI)
+	icatconn = sqlx.MustConnect("postgres", configuration.ICATURI)
 
-	app := api.New(dbconn, dbSchema, icatconn, userSuffix, zone, rootResourceNames)
+	app = api.New(dbconn, icatconn, configuration)
 
 	log.Infof("listening on port %d", *listenPort)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), app.Router()))
