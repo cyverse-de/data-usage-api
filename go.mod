@@ -5,6 +5,7 @@ go 1.17
 require (
 	github.com/Masterminds/squirrel v1.5.2
 	github.com/cyverse-de/configurate v0.0.0-20210914212501-fc18b48e00a9
+	github.com/cyverse-de/messaging v8.2.0+incompatible
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/labstack/echo/v4 v4.6.0
 	github.com/lib/pq v1.10.4
@@ -30,6 +31,7 @@ require (
 	github.com/spf13/cast v1.4.1 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
+	github.com/streadway/amqp v1.0.0 // indirect
 	github.com/subosito/gotenv v1.2.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.1 // indirect

@@ -1,10 +1,9 @@
 package api
 
 import (
-	"fmt"
-	"strings"
-
+	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/logging"
+	"github.com/cyverse-de/messaging"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
@@ -14,28 +13,21 @@ import (
 var log = logging.Log.WithFields(logrus.Fields{"package": "api"})
 
 type App struct {
-	dedb       *sqlx.DB
-	schema     string
-	icat       *sqlx.DB
-	router     *echo.Echo
-	userSuffix string
+	dedb          *sqlx.DB
+	icat          *sqlx.DB
+	router        *echo.Echo
+	amqp          *messaging.Client
+	configuration *config.Config
 }
 
-func New(dedb *sqlx.DB, schema string, icat *sqlx.DB, userSuffix string) *App {
+func New(dedb *sqlx.DB, icat *sqlx.DB, amqp *messaging.Client, configuration *config.Config) *App {
 	return &App{
-		dedb:       dedb,
-		schema:     schema,
-		icat:       icat,
-		router:     echo.New(),
-		userSuffix: userSuffix,
+		dedb:          dedb,
+		icat:          icat,
+		router:        echo.New(),
+		amqp:          amqp,
+		configuration: configuration,
 	}
-}
-
-func (a *App) FixUsername(username string) string {
-	if !strings.HasSuffix(username, a.userSuffix) {
-		return fmt.Sprintf("%s@%s", username, a.userSuffix)
-	}
-	return username
 }
 
 func (a *App) Router() *echo.Echo {
@@ -44,6 +36,7 @@ func (a *App) Router() *echo.Echo {
 
 	userdata := a.router.Group("/:username/data")
 	userdata.GET("/current", a.UserCurrentUsageHandler)
+	userdata.POST("/update", a.UpdateUserCurrentUsageHandler)
 
 	return a.router
 }

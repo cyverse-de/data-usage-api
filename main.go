@@ -5,14 +5,19 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"time"
+	"strings"
 
 	"github.com/cyverse-de/configurate"
+	a "github.com/cyverse-de/data-usage-api/amqp"
 	"github.com/cyverse-de/data-usage-api/api"
+	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/logging"
+	"github.com/cyverse-de/messaging"
 	"github.com/jmoiron/sqlx"
+	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	"github.com/streadway/amqp"
 
 	_ "github.com/lib/pq"
 )
@@ -20,31 +25,50 @@ import (
 var log = logging.Log.WithFields(logrus.Fields{"package": "main"})
 
 const defaultConfig = `
+dataUsageApi:
+  refreshInterval: 3h
+
 db:
   uri: postgres://de:notprod@dedb:5432/de?sslmode=disable
   schema: public
 
 icat:
   uri: postgres://ICAT:fakepassword@icat-db:5432/ICAT?sslmode=disable
+  zone: iplant
   rootResources:
     - mainIngestRes
     - mainReplRes
 
 users:
   domain: example.com
+
+amqp:
+  uri: amqp://guest:guest@rabbit:5672/
+  queue_prefix: ""
+  exchange:
+    name: de
+    type: topic
 `
+
+func getQueueName(prefix string) string {
+	if len(prefix) > 0 {
+		return fmt.Sprintf("%s.data-usage-api", prefix)
+	}
+	return "data-usage-api"
+}
 
 func main() {
 	var (
-		err      error
-		config   *viper.Viper
-		dbconn   *sqlx.DB
-		icatconn *sqlx.DB
+		err           error
+		cfg           *viper.Viper
+		dbconn        *sqlx.DB
+		icatconn      *sqlx.DB
+		configuration *config.Config
+		app           *api.App
 
-		configPath          = flag.String("config", "/etc/iplant/de/data-usage-api.yml", "Full path to the configuration file")
-		listenPort          = flag.Int("port", 60000, "The port the service listens on for requests")
-		logLevel            = flag.String("log-level", "info", "One of trace, debug, info, warn, error, fatal, or panic.")
-		refreshIntervalFlag = flag.String("refresh-interval", "3h", "The time between full re-scans of the data store. Must parse as a time.Duration.")
+		configPath = flag.String("config", "/etc/iplant/de/data-usage-api.yml", "Full path to the configuration file")
+		listenPort = flag.Int("port", 60000, "The port the service listens on for requests")
+		logLevel   = flag.String("log-level", "info", "One of trace, debug, info, warn, error, fatal, or panic.")
 	)
 
 	flag.Parse()
@@ -53,88 +77,71 @@ func main() {
 	log.Infof("config path is %s", *configPath)
 	log.Infof("listen port is %d", *listenPort)
 
-	config, err = configurate.InitDefaults(*configPath, defaultConfig)
+	cfg, err = configurate.InitDefaults(*configPath, defaultConfig)
 	if err != nil {
 		log.Fatal(err)
 	}
 	log.Infof("done reading configuration from %s", *configPath)
 
-	dbURI := config.GetString("db.uri")
-	if dbURI == "" {
-		log.Fatal("db.uri must be set in the configuration file")
-	}
-
-	dbSchema := config.GetString("db.schema")
-	if dbSchema == "" {
-		log.Fatal("db.schema must be set in the configuration file")
-	}
-
-	icatURI := config.GetString("icat.uri")
-	if icatURI == "" {
-		log.Fatal("icat.uri must be set in the configuration file")
-	}
-
-	userSuffix := config.GetString("users.domain")
-	if userSuffix == "" {
-		log.Fatal("users.domain must be set in the configuration file")
-	}
-
-	rootResourceNames := config.GetStringSlice("icat.rootResources")
-	if rootResourceNames == nil {
-		log.Fatal("icat.rootResources must be set in the configuration file")
-	}
-
-	//refreshInterval, err := time.ParseDuration(*refreshIntervalFlag)
-	_, err = time.ParseDuration(*refreshIntervalFlag)
+	configuration, err = config.NewFromViper(cfg)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	dbconn = sqlx.MustConnect("postgres", dbURI)
-	icatconn = sqlx.MustConnect("postgres", icatURI)
+	dbconn = sqlx.MustConnect("postgres", configuration.DBURI)
+	icatconn = sqlx.MustConnect("postgres", configuration.ICATURI)
 
-	app := api.New(dbconn, dbSchema, icatconn, userSuffix)
+	// configure and start AMQP bits here
+	listenClient, err := messaging.NewClient(configuration.AMQPURI, true)
+	if err != nil {
+		log.Fatal(errors.Wrap(err, "Unable to create the messaging listen client"))
+	}
+	defer listenClient.Close()
 
-	//workerConfig := worker.Config{
-	//	Name:                    strings.ReplaceAll(uuid.New().String(), "-", ""),
-	//	ExpirationInterval:      workerLifetime,
-	//	RefreshInterval:         refreshInterval,
-	//	WorkerPurgeInterval:     purgeWorkersInterval,
-	//	WorkSeekerPurgeInterval: purgeSeekersInterval,
-	//	WorkClaimPurgeInterval:  purgeClaimsInterval,
-	//	ClaimLifetime:           claimLifetime,
-	//	WorkSeekingLifetime:     seekingLifetime,
-	//	NewUserTotalInterval:    newUserTotalInterval,
-	//}
+	publishClient, err := messaging.NewClient(configuration.AMQPURI, true)
+	if err != nil {
+		log.Fatal(errors.Wrap(err, "Unable to create the messaging publish client"))
+	}
+	defer publishClient.Close()
 
-	//log.Infof("worker name is %s", workerConfig.Name)
+	log.Info(configuration.AMQPExchangeName)
+	err = publishClient.SetupPublishing(configuration.AMQPExchangeName)
+	if err != nil {
+		log.Fatal(errors.Wrap(err, "Unable to set up message publishing"))
+	}
 
-	//w, err := worker.New(context.Background(), &workerConfig, dbconn)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
+	go listenClient.Listen()
 
-	//log.Infof("worker ID is %s", w.ID)
+	queueName := getQueueName(configuration.AMQPQueuePrefix)
+	listenClient.AddConsumerMulti(
+		configuration.AMQPExchangeName,
+		configuration.AMQPExchangeType,
+		queueName,
+		[]string{"index.all", "index.usage.data", "index.usage.data.batch.user.#", a.SingleUserPrefix + ".#"},
+		func(del amqp.Delivery) {
+			var err error
+			log.Tracef("Got message: %s", del.RoutingKey)
+			if del.RoutingKey == "index.all" || del.RoutingKey == "index.usage.data" {
+				// generate prefixes and publish
+			} else if strings.HasPrefix(del.RoutingKey, "index.usage.data.batch.user") {
+				// handle batch
+			} else if strings.HasPrefix(del.RoutingKey, a.SingleUserPrefix) {
+				err = a.UpdateUserHandler(del, dbconn, icatconn, configuration)
+			}
+			if err != nil {
+				return
+			}
+			err = del.Ack(false)
+			if err != nil {
+				log.Error(errors.Wrap(err, fmt.Sprintf("Error acknowledging message: %s", del.RoutingKey)))
+			}
+		},
+		1)
+	// - listen for index.all (for convenience) and index.usage.data, and fetch all applicable users, batch them, and send out batch messages - start-of-batch usernames can have no dots so routing keys work
+	// - listen for index.usage.data.batch.user.<start>.<end>, and update the usage information for users from <start> to <end>, inclusive
+	// - listen for index.usage.data.user.<username>, and update the usage information for just that user
 
-	//go w.Start(context.Background())
-
-	//dedb := db.NewDE(dbconn, dbSchema)
-	//usage, err := dedb.AddUserDataUsage(context.Background(), "mian@iplantcollaborative.org", 12345678, time.Now())
-	//if err != nil {
-	//	log.Info(err)
-	//}
-	//log.Info(usage)
-
-	//icattx, err := icatconn.BeginTxx(context.Background(), nil)
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
-	//icatdb := db.NewICAT(icattx, userSuffix, "cyverse")
-	//usage, err := icatdb.UserCurrentDataUsage(context.Background(), "mian", rootResourceNames)
-	//if err != nil {
-	//	log.Error(err)
-	//}
-	//log.Info(usage)
+	app = api.New(dbconn, icatconn, publishClient, configuration)
 
 	log.Infof("listening on port %d", *listenPort)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), app.Router()))

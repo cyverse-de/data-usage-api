@@ -2,33 +2,27 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 
 	"github.com/Masterminds/squirrel"
-	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 )
 
 type ICATDatabase struct {
-	db         DatabaseAccessor
-	userSuffix string
-	zone       string
+	db                DatabaseAccessor
+	userSuffix        string
+	zone              string
+	rootResourceNames []string
 }
 
-func rollbackTxLogError(tx *sqlx.Tx) {
-	err := tx.Rollback()
-	if err != nil && err.Error() != "sql: transaction has already been committed or rolled back" {
-		log.Error(errors.Wrap(err, "Error rolling back transaction"))
-	}
-}
-
-func NewICAT(db DatabaseAccessor, userSuffix, zone string) *ICATDatabase {
-	return &ICATDatabase{db: db, userSuffix: userSuffix, zone: zone}
+func NewICAT(db DatabaseAccessor, userSuffix, zone string, rootResourceNames []string) *ICATDatabase {
+	return &ICATDatabase{db: db, userSuffix: userSuffix, zone: zone, rootResourceNames: rootResourceNames}
 }
 
 func (i *ICATDatabase) UnqualifiedUsername(username string) string {
-	return strings.TrimSuffix(username, i.userSuffix)
+	return strings.TrimSuffix(username, "@"+i.userSuffix)
 }
 
 func (i *ICATDatabase) createStorageRootMapping(context context.Context) error {
@@ -90,7 +84,8 @@ SELECT CASE WHEN coll_name LIKE '/' || $1 || '/home/%' THEN REGEXP_REPLACE(coll_
 	return nil
 }
 
-func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username string, rootResourceNames []string) (int64, error) {
+func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username string) (int64, error) {
+	u := i.UnqualifiedUsername(username)
 	// We should have a Tx here, or this will behave badly. Not sure how to ensure that/if it's possible to.
 
 	err := i.createStorageRootMapping(context)
@@ -98,7 +93,7 @@ func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username st
 		return 0, err
 	}
 
-	err = i.createSpecificUserColls(context, username)
+	err = i.createSpecificUserColls(context, u)
 	if err != nil {
 		return 0, err
 	}
@@ -106,23 +101,22 @@ func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username st
 	// use plain squirrel here to retain ?-style args for embedding in the next query
 	resourceQuery, resourceArgs, err := squirrel.Select("storage_id").
 		From("storage_root_mapping").
-		//Where(squirrel.Eq{"root_name": []string{"CyVerseRes", "taccCorralRes", "taccRes"}}).
-		Where(squirrel.Eq{"root_name": rootResourceNames}).
+		Where(squirrel.Eq{"root_name": i.rootResourceNames}).
 		ToSql()
 
 	if err != nil {
 		return 0, err
 	}
 
-	sql, args, err := psql.Select().
-		//Column("u.user_name").
+	// should this additionally return a timestamp, or even a semi-complete UserDataUsage object?
+	querys, args, err := psql.Select().
 		Column("SUM(d.data_size) AS file_volume").
 		From("r_user_main AS u").
 		Join("user_colls AS c ON c.user_name = u.user_name").
 		Join("r_data_main AS d ON d.coll_id = c.coll_id").
 		Where(squirrel.Eq{"u.user_type_name": "rodsuser"}).
 		Where(fmt.Sprintf("d.resc_id = ANY(ARRAY(%s))", resourceQuery), resourceArgs...).
-		Where(squirrel.Eq{"u.user_name": username}).
+		Where(squirrel.Eq{"u.user_name": u}).
 		GroupBy("u.user_name").
 		Limit(1).
 		ToSql()
@@ -131,24 +125,15 @@ func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username st
 		return 0, errors.Wrap(err, "Error formatting user data usage query")
 	}
 
-	log.Tracef("UserCurrentDataUsage SQL: %s, %+v", sql, args)
+	log.Tracef("UserCurrentDataUsage SQL: %s, %+v", querys, args)
 
 	var usage int64
-	err = i.db.GetContext(context, &usage, sql, args...)
-	if err != nil {
+	err = i.db.GetContext(context, &usage, querys, args...)
+	if err == sql.ErrNoRows {
+		return 0, err
+	} else if err != nil {
 		return 0, errors.Wrap(err, "Error running query")
 	}
 
 	return usage, nil
 }
-
-//func UserCurrentDataUsageDB(db *sqlx.DB, context context.Context, username string) (int64, error) {
-//	tx, err := db.BeginTxx(context, nil)
-//	if err != nil {
-//		return 0, errors.Wrap(err, "Error starting transaction")
-//	}
-//	defer rollbackTxLogError(tx)
-//
-//	i := NewICAT(tx)
-//	return i.UserCurrentDataUsage(context, username)
-//}
