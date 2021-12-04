@@ -7,6 +7,7 @@ import (
 	"github.com/cyverse-de/data-usage-api/db"
 	"github.com/cyverse-de/data-usage-api/logging"
 	"github.com/cyverse-de/data-usage-api/util"
+	"github.com/cyverse-de/messaging"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -16,6 +17,7 @@ import (
 var log = logging.Log.WithFields(logrus.Fields{"package": "amqp"})
 
 const SingleUserPrefix = "index.usage.data.user"
+const BatchUserPrefix = "index.usage.data.batch.user"
 
 func UpdateUserHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuration *config.Config) error {
 	username := del.RoutingKey[len(SingleUserPrefix)+1:]
@@ -59,5 +61,13 @@ func UpdateUserHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuration *co
 		return e
 	}
 
+	return nil
+}
+
+func UpdateUserBatchHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuration *config.Config) error {
+	return nil
+}
+
+func SendBatchMessages(del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *messaging.Client, configuration *config.Config) error {
 	return nil
 }

@@ -54,7 +54,7 @@ SELECT id, root FROM child_mapping WHERE storage`
 	return nil
 }
 
-func (i *ICATDatabase) createSpecificUserColls(context context.Context, username string) error {
+func (i *ICATDatabase) createSpecificUserColls(context context.Context, username string) (string, error) {
 	u := i.UnqualifiedUsername(username)
 	q := `
 CREATE TEMPORARY TABLE user_colls (user_name, coll_id) ON COMMIT DROP AS
@@ -78,10 +78,29 @@ SELECT CASE WHEN coll_name LIKE '/' || $1 || '/home/%' THEN REGEXP_REPLACE(coll_
 
 	_, err := i.db.ExecContext(context, q, i.zone, u)
 	if err != nil {
-		return errors.Wrap(err, "Error creating user_colls table for user")
+		return "", errors.Wrap(err, "Error creating user_colls table for user")
 	}
 
-	return nil
+	return "user_colls", nil
+}
+
+func (i *ICATDatabase) resourcesSubselect() (string, []interface{}, error) {
+	// use plain squirrel here to retain ?-style args for embedding in the next query
+	return squirrel.Select("storage_id").
+		From("storage_root_mapping").
+		Where(squirrel.Eq{"root_name": i.rootResourceNames}).
+		ToSql()
+}
+
+func (i *ICATDatabase) baseUsageQuery(userCollsTable, resourceQuery string, resourceArgs []interface{}) squirrel.SelectBuilder {
+	return psql.Select().
+		Column("SUM(d.data_size) AS file_volume").
+		From("r_user_main AS u").
+		Join(fmt.Sprintf("%s AS c ON c.user_name = u.user_name", userCollsTable)).
+		Join("r_data_main AS d ON d.coll_id = c.coll_id").
+		Where(squirrel.Eq{"u.user_type_name": "rodsuser"}).
+		Where(fmt.Sprintf("d.resc_id = ANY(ARRAY(%s))", resourceQuery), resourceArgs...).
+		GroupBy("u.user_name")
 }
 
 func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username string) (int64, error) {
@@ -93,31 +112,19 @@ func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username st
 		return 0, err
 	}
 
-	err = i.createSpecificUserColls(context, u)
+	resourceQuery, resourceArgs, err := i.resourcesSubselect()
 	if err != nil {
 		return 0, err
 	}
 
-	// use plain squirrel here to retain ?-style args for embedding in the next query
-	resourceQuery, resourceArgs, err := squirrel.Select("storage_id").
-		From("storage_root_mapping").
-		Where(squirrel.Eq{"root_name": i.rootResourceNames}).
-		ToSql()
-
+	userCollsTable, err := i.createSpecificUserColls(context, u)
 	if err != nil {
 		return 0, err
 	}
 
 	// should this additionally return a timestamp, or even a semi-complete UserDataUsage object?
-	querys, args, err := psql.Select().
-		Column("SUM(d.data_size) AS file_volume").
-		From("r_user_main AS u").
-		Join("user_colls AS c ON c.user_name = u.user_name").
-		Join("r_data_main AS d ON d.coll_id = c.coll_id").
-		Where(squirrel.Eq{"u.user_type_name": "rodsuser"}).
-		Where(fmt.Sprintf("d.resc_id = ANY(ARRAY(%s))", resourceQuery), resourceArgs...).
+	querys, args, err := i.baseUsageQuery(userCollsTable, resourceQuery, resourceArgs).
 		Where(squirrel.Eq{"u.user_name": u}).
-		GroupBy("u.user_name").
 		Limit(1).
 		ToSql()
 
