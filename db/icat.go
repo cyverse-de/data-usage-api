@@ -54,49 +54,57 @@ SELECT id, root FROM child_mapping WHERE storage`
 	return nil
 }
 
-func (i *ICATDatabase) createUserCollsTable(context context.Context) error {
+func (i *ICATDatabase) createUserCollsTable(context context.Context) (string, error) {
 	q := `
 CREATE TEMPORARY TABLE user_colls (user_name text, coll_id bigint) ON COMMIT DROP`
 	_, err := i.db.ExecContext(context, q)
 	if err != nil {
-		return errors.Wrap(err, "Error creating empty user_colls table")
+		return "", errors.Wrap(err, "Error creating empty user_colls table")
 	}
 
+	return "user_colls", nil
+}
+
+func (i *ICATDatabase) populateSpecificUserColls(context context.Context, username, table string) error {
+	q := fmt.Sprintf(`INSERT INTO %s (user_name, coll_id)
+SELECT CASE WHEN coll_name LIKE '/' || $1 || '/home/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/home/([^/]+).*', E'\\1')
+            WHEN coll_name LIKE '/' || $1 || '/trash/home/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/([^/]+).*', E'\\1')
+	    WHEN coll_name LIKE '/' || $1 || '/trash/home/de-irods/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/de-irods/([^/]+).*', E'\\1')
+	    WHEN coll_name LIKE '/' || $1 || '/trash/home/ipcservices/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/ipcservices/([^/]+).*', E'\\1')
+       END, coll_id
+    FROM r_coll_main
+   WHERE coll_name LIKE '/' || $1 || '/home/' || $2 || '/%%'
+      OR coll_name =    '/' || $1 || '/home/' || $2
+      OR coll_name LIKE '/' || $1 || '/trash/home/' || $2 || '/%%'
+      OR coll_name =    '/' || $1 || '/trash/home/' || $2
+      OR coll_name LIKE '/' || $1 || '/trash/home/de-irods/' || $2 || '/%%'
+      OR coll_name =    '/' || $1 || '/trash/home/de-irods/' || $2
+      OR coll_name LIKE '/' || $1 || '/trash/home/ipcservices/' || $2 || '/%%'
+      OR coll_name =    '/' || $1 || '/trash/home/ipcservices/' || $2
+`, table)
+
+	log.Tracef("createSpecificUserColls SQL: %s, [%s %s]", q, i.zone, username)
+
+	_, err := i.db.ExecContext(context, q, i.zone, username)
+	if err != nil {
+		return errors.Wrap(err, "Error filling user_colls table for user")
+	}
 	return nil
 }
 
 func (i *ICATDatabase) createSpecificUserColls(context context.Context, username string) (string, error) {
 	u := i.UnqualifiedUsername(username)
-	err := i.createUserCollsTable(context)
+	t, err := i.createUserCollsTable(context)
 	if err != nil {
 		return "", err
 	}
 
-	q := `INSERT INTO user_colls (user_name, coll_id)
-SELECT CASE WHEN coll_name LIKE '/' || $1 || '/home/%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/home/([^/]+).*', E'\\1')
-            WHEN coll_name LIKE '/' || $1 || '/trash/home/%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/([^/]+).*', E'\\1')
-	    WHEN coll_name LIKE '/' || $1 || '/trash/home/de-irods/%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/de-irods/([^/]+).*', E'\\1')
-	    WHEN coll_name LIKE '/' || $1 || '/trash/home/ipcservices/%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/ipcservices/([^/]+).*', E'\\1')
-       END, coll_id
-    FROM r_coll_main
-   WHERE coll_name LIKE '/' || $1 || '/home/' || $2 || '/%'
-      OR coll_name =    '/' || $1 || '/home/' || $2
-      OR coll_name LIKE '/' || $1 || '/trash/home/' || $2 || '/%'
-      OR coll_name =    '/' || $1 || '/trash/home/' || $2
-      OR coll_name LIKE '/' || $1 || '/trash/home/de-irods/' || $2 || '/%'
-      OR coll_name =    '/' || $1 || '/trash/home/de-irods/' || $2
-      OR coll_name LIKE '/' || $1 || '/trash/home/ipcservices/' || $2 || '/%'
-      OR coll_name =    '/' || $1 || '/trash/home/ipcservices/' || $2
-`
-
-	log.Tracef("createSpecificUserColls SQL: %s, [%s %s]", q, i.zone, u)
-
-	_, err = i.db.ExecContext(context, q, i.zone, u)
+	err = i.populateSpecificUserColls(context, u, t)
 	if err != nil {
-		return "", errors.Wrap(err, "Error filling user_colls table for user")
+		return "", err
 	}
 
-	return "user_colls", nil
+	return t, nil
 }
 
 func (i *ICATDatabase) resourcesSubselect() (string, []interface{}, error) {
