@@ -54,15 +54,30 @@ SELECT id, root FROM child_mapping WHERE storage`
 	return nil
 }
 
+func (i *ICATDatabase) createUserCollsTable(context context.Context) error {
+	q := `
+CREATE TEMPORARY TABLE user_colls (user_name text, coll_id bigint) ON COMMIT DROP`
+	_, err := i.db.ExecContext(context, q)
+	if err != nil {
+		return errors.Wrap(err, "Error creating empty user_colls table")
+	}
+
+	return nil
+}
+
 func (i *ICATDatabase) createSpecificUserColls(context context.Context, username string) (string, error) {
 	u := i.UnqualifiedUsername(username)
-	q := `
-CREATE TEMPORARY TABLE user_colls (user_name, coll_id) ON COMMIT DROP AS
+	err := i.createUserCollsTable(context)
+	if err != nil {
+		return "", err
+	}
+
+	q := `INSERT INTO user_colls (user_name, coll_id)
 SELECT CASE WHEN coll_name LIKE '/' || $1 || '/home/%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/home/([^/]+).*', E'\\1')
             WHEN coll_name LIKE '/' || $1 || '/trash/home/%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/([^/]+).*', E'\\1')
 	    WHEN coll_name LIKE '/' || $1 || '/trash/home/de-irods/%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/de-irods/([^/]+).*', E'\\1')
 	    WHEN coll_name LIKE '/' || $1 || '/trash/home/ipcservices/%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/ipcservices/([^/]+).*', E'\\1')
-       END, coll_id, coll_name
+       END, coll_id
     FROM r_coll_main
    WHERE coll_name LIKE '/' || $1 || '/home/' || $2 || '/%'
       OR coll_name =    '/' || $1 || '/home/' || $2
@@ -76,9 +91,9 @@ SELECT CASE WHEN coll_name LIKE '/' || $1 || '/home/%' THEN REGEXP_REPLACE(coll_
 
 	log.Tracef("createSpecificUserColls SQL: %s, [%s %s]", q, i.zone, u)
 
-	_, err := i.db.ExecContext(context, q, i.zone, u)
+	_, err = i.db.ExecContext(context, q, i.zone, u)
 	if err != nil {
-		return "", errors.Wrap(err, "Error creating user_colls table for user")
+		return "", errors.Wrap(err, "Error filling user_colls table for user")
 	}
 
 	return "user_colls", nil
@@ -143,4 +158,21 @@ func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username st
 	}
 
 	return usage, nil
+}
+
+func (i *ICATDatabase) BatchCurrentDataUsage(context context.Context, start, end string) (map[string]int64, error) {
+	// Again, this should be a Tx
+	rv := make(map[string]int64)
+
+	err := i.createStorageRootMapping(context)
+	if err != nil {
+		return rv, err
+	}
+
+	//resourceQuery, resourceArgs, err := i.resourcesSubselect()
+	if err != nil {
+		return rv, err
+	}
+
+	return rv, nil
 }
