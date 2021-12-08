@@ -236,6 +236,9 @@ func (i *ICATDatabase) BatchCurrentDataUsage(context context.Context, start, end
 		Where("u.user_name BETWEEN ? AND ?", s, e).
 		Column("u.user_name AS username").
 		ToSql()
+	if err != nil {
+		return rv, errors.Wrap(err, "Error formatting query")
+	}
 
 	log.Tracef("BatchCurrentDataUsage SQL: %s, %+v", querys, args)
 
