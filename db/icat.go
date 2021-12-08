@@ -83,11 +83,38 @@ SELECT CASE WHEN coll_name LIKE '/' || $1 || '/home/%%' THEN REGEXP_REPLACE(coll
       OR coll_name =    '/' || $1 || '/trash/home/ipcservices/' || $2
 `, table)
 
-	log.Tracef("createSpecificUserColls SQL: %s, [%s %s]", q, i.zone, username)
+	log.Tracef("populateSpecificUserColls SQL: %s, [%s %s]", q, i.zone, username)
 
 	_, err := i.db.ExecContext(context, q, i.zone, username)
 	if err != nil {
 		return errors.Wrap(err, "Error filling user_colls table for user")
+	}
+	return nil
+}
+
+func (i *ICATDatabase) populateBatchUserColls(context context.Context, start, end, table string) error {
+	q := fmt.Sprintf(`INSERT INTO %s (user_name, coll_id)
+SELECT CASE WHEN coll_name LIKE '/' || $1 || '/home/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/home/([^/]+).*', E'\\1')
+            WHEN coll_name LIKE '/' || $1 || '/trash/home/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/([^/]+).*', E'\\1')
+	    WHEN coll_name LIKE '/' || $1 || '/trash/home/de-irods/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/de-irods/([^/]+).*', E'\\1')
+	    WHEN coll_name LIKE '/' || $1 || '/trash/home/ipcservices/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/ipcservices/([^/]+).*', E'\\1')
+       END, coll_id
+    FROM r_coll_main
+   WHERE coll_name BETWEEN '/' || $1 || '/home/' || $2 AND '/' || $1 || '/home/' || $3
+      OR coll_name LIKE    '/' || $1 || '/home/' || $3 || '/%%'
+      OR coll_name BETWEEN '/' || $1 || '/trash/home/' || $2 AND '/' || $1 || '/trash/home/' || $3
+      OR coll_name LIKE    '/' || $1 || '/trash/home/' || $3 || '/%%'
+      OR coll_name BETWEEN '/' || $1 || '/trash/home/de-irods/' || $2 AND '/' || $1 || '/trash/home/de-irods/' || $3
+      OR coll_name LIKE    '/' || $1 || '/trash/home/de-irods/' || $3 || '/%%'
+      OR coll_name BETWEEN '/' || $1 || '/trash/home/ipcservices/' || $2 AND '/' || $1 || '/trash/home/ipcservices/' || $3
+      OR coll_name LIKE    '/' || $1 || '/trash/home/ipcservices/' || $3 || '/%%'
+`, table)
+
+	log.Tracef("populateSpecificUserColls SQL: %s, [%s %s %s]", q, i.zone, start, end)
+
+	_, err := i.db.ExecContext(context, q, i.zone, start, end)
+	if err != nil {
+		return errors.Wrap(err, "Error filling user_colls table for batch")
 	}
 	return nil
 }
@@ -100,6 +127,22 @@ func (i *ICATDatabase) createSpecificUserColls(context context.Context, username
 	}
 
 	err = i.populateSpecificUserColls(context, u, t)
+	if err != nil {
+		return "", err
+	}
+
+	return t, nil
+}
+
+func (i *ICATDatabase) createBatchUserColls(context context.Context, start, end string) (string, error) {
+	s := i.UnqualifiedUsername(start)
+	e := i.UnqualifiedUsername(end)
+	t, err := i.createUserCollsTable(context)
+	if err != nil {
+		return "", err
+	}
+
+	err = i.populateBatchUserColls(context, s, e, t)
 	if err != nil {
 		return "", err
 	}
@@ -171,16 +214,45 @@ func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username st
 func (i *ICATDatabase) BatchCurrentDataUsage(context context.Context, start, end string) (map[string]int64, error) {
 	// Again, this should be a Tx
 	rv := make(map[string]int64)
+	s := i.UnqualifiedUsername(start)
+	e := i.UnqualifiedUsername(end)
 
 	err := i.createStorageRootMapping(context)
 	if err != nil {
 		return rv, err
 	}
 
-	//resourceQuery, resourceArgs, err := i.resourcesSubselect()
+	resourceQuery, resourceArgs, err := i.resourcesSubselect()
 	if err != nil {
 		return rv, err
 	}
 
+	userCollsTable, err := i.createBatchUserColls(context, start, end)
+	if err != nil {
+		return rv, err
+	}
+
+	querys, args, err := i.baseUsageQuery(userCollsTable, resourceQuery, resourceArgs).
+		Where("u.user_name BETWEEN ? AND ?", s, e).
+		Column("u.user_name AS username").
+		ToSql()
+
+	log.Tracef("BatchCurrentDataUsage SQL: %s, %+v", querys, args)
+
+	rows, err := i.db.QueryxContext(context, querys, args...)
+	if err != nil {
+		return rv, errors.Wrap(err, "Error fetching usage for users")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var uname string
+		var total int64
+		err = rows.Scan(&total, &uname)
+		if err != nil {
+			return rv, err
+		}
+		log.Tracef("Got %d for %s", total, uname)
+		rv[uname] = total
+	}
 	return rv, nil
 }

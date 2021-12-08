@@ -2,6 +2,7 @@ package amqp
 
 import (
 	"context"
+	"strings"
 
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/db"
@@ -65,6 +66,21 @@ func UpdateUserHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuration *co
 }
 
 func UpdateUserBatchHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuration *config.Config) error {
+	usernames := strings.SplitN(del.RoutingKey[len(BatchUserPrefix)+1:], ".", 2)
+	log.Infof("Updating the user batch from %s to %s", usernames[0], usernames[1])
+	ctx := context.Background()
+	icattx, err := icat.BeginTxx(ctx, nil)
+	if err != nil {
+		return err
+	}
+
+	i := db.NewICAT(icattx, configuration.UserSuffix, configuration.Zone, configuration.RootResourceNames)
+	usages, err := i.BatchCurrentDataUsage(ctx, usernames[0], usernames[1])
+	if err != nil {
+		return err
+	}
+
+	log.Tracef("usages in batch: %+v", usages)
 	return nil
 }
 
