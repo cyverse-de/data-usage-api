@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/squirrel"
@@ -85,4 +86,34 @@ func (d *DEDatabase) AddUserDataUsage(context context.Context, username string, 
 		Suffix("RETURNING d.id, d.total, d.user_id, (SELECT username from users WHERE id = d.user_id) as username, d.time AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS time, d.last_modified AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS last_modified")
 
 	return d.doUserUsage(context, query)
+}
+
+func (d *DEDatabase) EnsureUsers(context context.Context, users []string) error {
+	log.Tracef("Ensuring users %+v", users)
+	// Users passed here should already have the user suffix
+	for _, user := range users {
+		if !strings.Contains(user, "@") {
+			return errors.New("Usernames passed to EnsureUsers should already be domain-qualified")
+		}
+	}
+
+	query := psql.Insert(d.Table("users", "u")).
+		Columns("username").
+		Suffix("ON CONFLICT (username) DO NOTHING")
+	for _, user := range users {
+		query = query.Values(user)
+	}
+
+	qs, args, err := query.ToSql()
+	if err != nil {
+		return errors.Wrap(err, "Error formatting user insert SQL")
+	}
+
+	log.Tracef("EnsureUsers SQL: %s, %+v", qs, args)
+
+	_, err = d.db.ExecContext(context, qs, args...)
+	if err != nil {
+		return errors.Wrap(err, "Error inserting users")
+	}
+	return nil
 }
