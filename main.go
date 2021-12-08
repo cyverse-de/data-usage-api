@@ -129,6 +129,7 @@ func main() {
 				err = a.UpdateUserHandler(del, dbconn, icatconn, configuration)
 			}
 			if err != nil {
+				log.Error(errors.Wrap(err, "Error handling message"))
 				return
 			}
 			err = del.Ack(false)
