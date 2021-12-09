@@ -268,7 +268,6 @@ func (i *ICATDatabase) BatchCurrentDataUsage(context context.Context, start, end
 
 func (i *ICATDatabase) GetUserBatchBounds(context context.Context, batchSize int) ([][]string, error) {
 	var bounds [][]string
-	// with users as (select row_number() over (order by user_name) AS n, r_user_main.user_name from r_user_main where user_type_name = 'rodsuser') select n, user_name from users where n % 100 = 0 or (n-1) % 100 = 0 union all select max(n), max(user_name) from users;
 	prefix := "WITH users AS (SELECT row_number() OVER (ORDER BY user_name) AS n, user_name FROM r_user_main WHERE user_type_name = 'rodsuser')"
 	querys, args, err := psql.Select("n", "user_name").
 		From("users").
