@@ -69,18 +69,40 @@ func UpdateUserBatchHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuratio
 	usernames := strings.SplitN(del.RoutingKey[len(BatchUserPrefix)+1:], ".", 2)
 	log.Infof("Updating the user batch from %s to %s", usernames[0], usernames[1])
 	ctx := context.Background()
-	icattx, err := icat.BeginTxx(ctx, nil)
+
+	dbs, rb, commit, err := db.NewBothTx(ctx, dedb, configuration.DBSchema, icat, configuration.UserSuffix, configuration.Zone, configuration.RootResourceNames)
 	if err != nil {
-		return err
+		e := errors.Wrap(err, "Failed setting up database")
+		log.Error(e)
+		rejectErr := del.Reject(!del.Redelivered)
+		if rejectErr != nil {
+			log.Error(errors.Wrap(rejectErr, "Failed rejecting failed message"))
+		}
+		return e
+	}
+	defer rb()
+
+	err = dbs.UpdateUserDataUsageBatch(ctx, usernames[0], usernames[1])
+	if err != nil {
+		e := errors.Wrap(err, "Failed updating usage information")
+		log.Error(e)
+		rejectErr := del.Reject(!del.Redelivered)
+		if rejectErr != nil {
+			log.Error(errors.Wrap(rejectErr, "Failed rejecting failed message"))
+		}
+		return e
+	}
+	err = commit()
+	if err != nil {
+		e := errors.Wrap(err, "Failed updating usage information")
+		log.Error(e)
+		rejectErr := del.Reject(!del.Redelivered)
+		if rejectErr != nil {
+			log.Error(errors.Wrap(rejectErr, "Failed rejecting failed message"))
+		}
+		return e
 	}
 
-	i := db.NewICAT(icattx, configuration.UserSuffix, configuration.Zone, configuration.RootResourceNames)
-	usages, err := i.BatchCurrentDataUsage(ctx, usernames[0], usernames[1])
-	if err != nil {
-		return err
-	}
-
-	log.Tracef("usages in batch: %+v", usages)
 	return nil
 }
 

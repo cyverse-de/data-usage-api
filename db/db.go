@@ -19,4 +19,5 @@ type DatabaseAccessor interface {
 	QueryxContext(context.Context, string, ...interface{}) (*sqlx.Rows, error)
 	ExecContext(context.Context, string, ...interface{}) (sql.Result, error)
 	GetContext(context.Context, interface{}, string, ...interface{}) error
+	SelectContext(context.Context, interface{}, string, ...interface{}) error
 }

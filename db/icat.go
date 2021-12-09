@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/Masterminds/squirrel"
+	"github.com/cyverse-de/data-usage-api/config"
+	"github.com/cyverse-de/data-usage-api/util"
 	"github.com/pkg/errors"
 )
 
@@ -19,6 +21,10 @@ type ICATDatabase struct {
 
 func NewICAT(db DatabaseAccessor, userSuffix, zone string, rootResourceNames []string) *ICATDatabase {
 	return &ICATDatabase{db: db, userSuffix: userSuffix, zone: zone, rootResourceNames: rootResourceNames}
+}
+
+func (i *ICATDatabase) FixUsername(username string) string {
+	return util.FixUsername(username, &config.Config{UserSuffix: i.userSuffix})
 }
 
 func (i *ICATDatabase) UnqualifiedUsername(username string) string {
