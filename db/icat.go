@@ -265,3 +265,49 @@ func (i *ICATDatabase) BatchCurrentDataUsage(context context.Context, start, end
 	}
 	return rv, nil
 }
+
+func (i *ICATDatabase) GetUserBatchBounds(context context.Context, batchSize int) ([][]string, error) {
+	var bounds [][]string
+	// with users as (select row_number() over (order by user_name) AS n, r_user_main.user_name from r_user_main where user_type_name = 'rodsuser') select n, user_name from users where n % 100 = 0 or (n-1) % 100 = 0 union all select max(n), max(user_name) from users;
+	prefix := "WITH users AS (SELECT row_number() OVER (ORDER BY user_name) AS n, user_name FROM r_user_main WHERE user_type_name = 'rodsuser')"
+	querys, args, err := psql.Select("n", "user_name").
+		From("users").
+		Where("n % ? = 0 OR (n - 1) % ? = 0", batchSize, batchSize).
+		Prefix(prefix).
+		Suffix("UNION ALL SELECT max(n), max(user_name) FROM users").
+		ToSql()
+
+	if err != nil {
+		return bounds, errors.Wrap(err, "Error formatting SQL query")
+	}
+
+	rows, err := i.db.QueryxContext(context, querys, args...)
+	if err != nil {
+		return bounds, errors.Wrap(err, "Error fetching user batch bounds")
+	}
+	defer rows.Close()
+
+	boundsMap := make(map[int]string)
+	maxN := 0
+	for rows.Next() {
+		var rown int
+		var username string
+		err = rows.Scan(&rown, &username)
+		if err != nil {
+			return bounds, err
+		}
+		boundsMap[rown] = username
+		maxN = rown
+	}
+	log.Tracef("%d %+v", maxN, boundsMap)
+
+	for i := 1; i < maxN; i = i + batchSize {
+		upperBound, ok := boundsMap[i+batchSize-1]
+		if !ok && i+batchSize > maxN {
+			upperBound = boundsMap[maxN]
+		}
+		bounds = append(bounds, []string{boundsMap[i], upperBound})
+	}
+
+	return bounds, nil
+}

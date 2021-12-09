@@ -2,6 +2,7 @@ package amqp
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cyverse-de/data-usage-api/config"
@@ -107,5 +108,24 @@ func UpdateUserBatchHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuratio
 }
 
 func SendBatchMessages(del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *messaging.Client, configuration *config.Config) error {
-	return nil
+	ctx := context.Background()
+	i := db.NewICAT(icat, configuration.UserSuffix, configuration.Zone, configuration.RootResourceNames)
+	batches, err := i.GetUserBatchBounds(ctx, configuration.BatchSize)
+	if err != nil {
+		return errors.Wrap(err, "Failed getting user batch bounds")
+	}
+	log.Tracef("batches: %+v", batches)
+	var overall_error error
+	for _, batch := range batches {
+		start := i.UnqualifiedUsername(batch[0])
+		end := i.UnqualifiedUsername(batch[1])
+		err = amqpClient.Publish(fmt.Sprintf("index.usage.data.batch.user.%s.%s", start, end), []byte{})
+		if err != nil {
+			log.Error(errors.Wrap(err, fmt.Sprintf("Error publishing message for batch %s - %s", start, end)))
+			overall_error = err
+			// continue anyway though in case it's specific to this one batch
+		}
+
+	}
+	return overall_error
 }

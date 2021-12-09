@@ -48,6 +48,7 @@ amqp:
   exchange:
     name: de
     type: topic
+  batch_size: 100
 `
 
 func getQueueName(prefix string) string {

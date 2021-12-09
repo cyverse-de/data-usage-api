@@ -22,6 +22,7 @@ type Config struct {
 	AMQPExchangeName string
 	AMQPExchangeType string
 	AMQPQueuePrefix  string
+	BatchSize        int
 }
 
 func NewFromViper(cfg *viper.Viper) (*Config, error) {
@@ -41,6 +42,7 @@ func NewFromViper(cfg *viper.Viper) (*Config, error) {
 		AMQPExchangeName:  cfg.GetString("amqp.exchange.name"),
 		AMQPExchangeType:  cfg.GetString("amqp.exchange.type"),
 		AMQPQueuePrefix:   cfg.GetString("amqp.queue_prefix"),
+		BatchSize:         cfg.GetInt("amqp.batch_size"),
 	}
 
 	err = c.Validate()
