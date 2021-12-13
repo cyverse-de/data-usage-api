@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Masterminds/squirrel"
@@ -85,4 +86,75 @@ func (d *DEDatabase) AddUserDataUsage(context context.Context, username string, 
 		Suffix("RETURNING d.id, d.total, d.user_id, (SELECT username from users WHERE id = d.user_id) as username, d.time AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS time, d.last_modified AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS last_modified")
 
 	return d.doUserUsage(context, query)
+}
+
+func (d *DEDatabase) AddUserDataUsageBatch(context context.Context, usages map[string]int64, time time.Time) ([]*UserDataUsage, error) {
+	log.Tracef("Inserting usages: %+v at %s", usages, time)
+	var placeholders []string
+	var startargs []interface{}
+	for usr, usg := range usages {
+		placeholders = append(placeholders, "(?::text, ?::bigint)")
+		startargs = append(startargs, usr, usg)
+	}
+	startcte := "WITH new_usages (username, usage) AS (VALUES " + strings.Join(placeholders, ",") + ")"
+
+	querys, args, err := psql.Insert(d.Table("user_data_usage", "d")).
+		Prefix(startcte, startargs...).
+		Columns("total", "time", "user_id").
+		Select(squirrel.Select().
+			Column("new_usages.usage AS total").
+			Column("? AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS time", time).
+			Column("u.id").
+			From(d.Table("users", "u")).
+			Join("new_usages ON (new_usages.username = u.username)"),
+		).
+		Suffix("RETURNING d.id, d.total, d.user_id, (SELECT username from users WHERE id = d.user_id) as username, d.time AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS time, d.last_modified AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS last_modified").
+		ToSql()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "Error formatting SQL query")
+	}
+
+	log.Tracef("AddUserDataUsageBatch SQL: %s, %+v", querys, args)
+
+	var rv []*UserDataUsage
+
+	err = d.db.SelectContext(context, &rv, querys, args...)
+	if err == sql.ErrNoRows {
+		return nil, err
+	} else if err != nil {
+		return nil, errors.Wrap(err, "Error running query")
+	}
+
+	return rv, nil
+}
+
+func (d *DEDatabase) EnsureUsers(context context.Context, users []string) error {
+	log.Tracef("Ensuring users %+v", users)
+	// Users passed here should already have the user suffix
+	for _, user := range users {
+		if !strings.Contains(user, "@") {
+			return errors.New("Usernames passed to EnsureUsers should already be domain-qualified")
+		}
+	}
+
+	query := psql.Insert(d.Table("users", "u")).
+		Columns("username").
+		Suffix("ON CONFLICT (username) DO NOTHING")
+	for _, user := range users {
+		query = query.Values(user)
+	}
+
+	qs, args, err := query.ToSql()
+	if err != nil {
+		return errors.Wrap(err, "Error formatting user insert SQL")
+	}
+
+	log.Tracef("EnsureUsers SQL: %s, %+v", qs, args)
+
+	_, err = d.db.ExecContext(context, qs, args...)
+	if err != nil {
+		return errors.Wrap(err, "Error inserting users")
+	}
+	return nil
 }

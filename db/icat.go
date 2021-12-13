@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/Masterminds/squirrel"
+	"github.com/cyverse-de/data-usage-api/config"
+	"github.com/cyverse-de/data-usage-api/util"
 	"github.com/pkg/errors"
 )
 
@@ -19,6 +21,10 @@ type ICATDatabase struct {
 
 func NewICAT(db DatabaseAccessor, userSuffix, zone string, rootResourceNames []string) *ICATDatabase {
 	return &ICATDatabase{db: db, userSuffix: userSuffix, zone: zone, rootResourceNames: rootResourceNames}
+}
+
+func (i *ICATDatabase) FixUsername(username string) string {
+	return util.FixUsername(username, &config.Config{UserSuffix: i.userSuffix})
 }
 
 func (i *ICATDatabase) UnqualifiedUsername(username string) string {
@@ -54,34 +60,119 @@ SELECT id, root FROM child_mapping WHERE storage`
 	return nil
 }
 
-func (i *ICATDatabase) createSpecificUserColls(context context.Context, username string) error {
-	u := i.UnqualifiedUsername(username)
+func (i *ICATDatabase) createUserCollsTable(context context.Context) (string, error) {
 	q := `
-CREATE TEMPORARY TABLE user_colls (user_name, coll_id) ON COMMIT DROP AS
-SELECT CASE WHEN coll_name LIKE '/' || $1 || '/home/%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/home/([^/]+).*', E'\\1')
-            WHEN coll_name LIKE '/' || $1 || '/trash/home/%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/([^/]+).*', E'\\1')
-	    WHEN coll_name LIKE '/' || $1 || '/trash/home/de-irods/%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/de-irods/([^/]+).*', E'\\1')
-	    WHEN coll_name LIKE '/' || $1 || '/trash/home/ipcservices/%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/ipcservices/([^/]+).*', E'\\1')
-       END, coll_id, coll_name
-    FROM r_coll_main
-   WHERE coll_name LIKE '/' || $1 || '/home/' || $2 || '/%'
-      OR coll_name =    '/' || $1 || '/home/' || $2
-      OR coll_name LIKE '/' || $1 || '/trash/home/' || $2 || '/%'
-      OR coll_name =    '/' || $1 || '/trash/home/' || $2
-      OR coll_name LIKE '/' || $1 || '/trash/home/de-irods/' || $2 || '/%'
-      OR coll_name =    '/' || $1 || '/trash/home/de-irods/' || $2
-      OR coll_name LIKE '/' || $1 || '/trash/home/ipcservices/' || $2 || '/%'
-      OR coll_name =    '/' || $1 || '/trash/home/ipcservices/' || $2
-`
-
-	log.Tracef("createSpecificUserColls SQL: %s, [%s %s]", q, i.zone, u)
-
-	_, err := i.db.ExecContext(context, q, i.zone, u)
+CREATE TEMPORARY TABLE user_colls (user_name text, coll_id bigint) ON COMMIT DROP`
+	_, err := i.db.ExecContext(context, q)
 	if err != nil {
-		return errors.Wrap(err, "Error creating user_colls table for user")
+		return "", errors.Wrap(err, "Error creating empty user_colls table")
 	}
 
+	return "user_colls", nil
+}
+
+func (i *ICATDatabase) populateSpecificUserColls(context context.Context, username, table string) error {
+	q := fmt.Sprintf(`INSERT INTO %s (user_name, coll_id)
+SELECT CASE WHEN coll_name LIKE '/' || $1 || '/home/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/home/([^/]+).*', E'\\1')
+            WHEN coll_name LIKE '/' || $1 || '/trash/home/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/([^/]+).*', E'\\1')
+	    WHEN coll_name LIKE '/' || $1 || '/trash/home/de-irods/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/de-irods/([^/]+).*', E'\\1')
+	    WHEN coll_name LIKE '/' || $1 || '/trash/home/ipcservices/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/ipcservices/([^/]+).*', E'\\1')
+       END, coll_id
+    FROM r_coll_main
+   WHERE coll_name LIKE '/' || $1 || '/home/' || $2 || '/%%'
+      OR coll_name =    '/' || $1 || '/home/' || $2
+      OR coll_name LIKE '/' || $1 || '/trash/home/' || $2 || '/%%'
+      OR coll_name =    '/' || $1 || '/trash/home/' || $2
+      OR coll_name LIKE '/' || $1 || '/trash/home/de-irods/' || $2 || '/%%'
+      OR coll_name =    '/' || $1 || '/trash/home/de-irods/' || $2
+      OR coll_name LIKE '/' || $1 || '/trash/home/ipcservices/' || $2 || '/%%'
+      OR coll_name =    '/' || $1 || '/trash/home/ipcservices/' || $2
+`, table)
+
+	log.Tracef("populateSpecificUserColls SQL: %s, [%s %s]", q, i.zone, username)
+
+	_, err := i.db.ExecContext(context, q, i.zone, username)
+	if err != nil {
+		return errors.Wrap(err, "Error filling user_colls table for user")
+	}
 	return nil
+}
+
+func (i *ICATDatabase) populateBatchUserColls(context context.Context, start, end, table string) error {
+	q := fmt.Sprintf(`INSERT INTO %s (user_name, coll_id)
+SELECT CASE WHEN coll_name LIKE '/' || $1 || '/home/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/home/([^/]+).*', E'\\1')
+            WHEN coll_name LIKE '/' || $1 || '/trash/home/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/([^/]+).*', E'\\1')
+	    WHEN coll_name LIKE '/' || $1 || '/trash/home/de-irods/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/de-irods/([^/]+).*', E'\\1')
+	    WHEN coll_name LIKE '/' || $1 || '/trash/home/ipcservices/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/ipcservices/([^/]+).*', E'\\1')
+       END, coll_id
+    FROM r_coll_main
+   WHERE coll_name BETWEEN '/' || $1 || '/home/' || $2 AND '/' || $1 || '/home/' || $3
+      OR coll_name LIKE    '/' || $1 || '/home/' || $3 || '/%%'
+      OR coll_name BETWEEN '/' || $1 || '/trash/home/' || $2 AND '/' || $1 || '/trash/home/' || $3
+      OR coll_name LIKE    '/' || $1 || '/trash/home/' || $3 || '/%%'
+      OR coll_name BETWEEN '/' || $1 || '/trash/home/de-irods/' || $2 AND '/' || $1 || '/trash/home/de-irods/' || $3
+      OR coll_name LIKE    '/' || $1 || '/trash/home/de-irods/' || $3 || '/%%'
+      OR coll_name BETWEEN '/' || $1 || '/trash/home/ipcservices/' || $2 AND '/' || $1 || '/trash/home/ipcservices/' || $3
+      OR coll_name LIKE    '/' || $1 || '/trash/home/ipcservices/' || $3 || '/%%'
+`, table)
+
+	log.Tracef("populateSpecificUserColls SQL: %s, [%s %s %s]", q, i.zone, start, end)
+
+	_, err := i.db.ExecContext(context, q, i.zone, start, end)
+	if err != nil {
+		return errors.Wrap(err, "Error filling user_colls table for batch")
+	}
+	return nil
+}
+
+func (i *ICATDatabase) createSpecificUserColls(context context.Context, username string) (string, error) {
+	u := i.UnqualifiedUsername(username)
+	t, err := i.createUserCollsTable(context)
+	if err != nil {
+		return "", err
+	}
+
+	err = i.populateSpecificUserColls(context, u, t)
+	if err != nil {
+		return "", err
+	}
+
+	return t, nil
+}
+
+func (i *ICATDatabase) createBatchUserColls(context context.Context, start, end string) (string, error) {
+	s := i.UnqualifiedUsername(start)
+	e := i.UnqualifiedUsername(end)
+	t, err := i.createUserCollsTable(context)
+	if err != nil {
+		return "", err
+	}
+
+	err = i.populateBatchUserColls(context, s, e, t)
+	if err != nil {
+		return "", err
+	}
+
+	return t, nil
+}
+
+func (i *ICATDatabase) resourcesSubselect() (string, []interface{}, error) {
+	// use plain squirrel here to retain ?-style args for embedding in the next query
+	return squirrel.Select("storage_id").
+		From("storage_root_mapping").
+		Where(squirrel.Eq{"root_name": i.rootResourceNames}).
+		ToSql()
+}
+
+func (i *ICATDatabase) baseUsageQuery(userCollsTable, resourceQuery string, resourceArgs []interface{}) squirrel.SelectBuilder {
+	return psql.Select().
+		Column("SUM(d.data_size) AS file_volume").
+		From("r_user_main AS u").
+		Join(fmt.Sprintf("%s AS c ON c.user_name = u.user_name", userCollsTable)).
+		Join("r_data_main AS d ON d.coll_id = c.coll_id").
+		Where(squirrel.Eq{"u.user_type_name": "rodsuser"}).
+		Where(fmt.Sprintf("d.resc_id = ANY(ARRAY(%s))", resourceQuery), resourceArgs...).
+		GroupBy("u.user_name")
 }
 
 func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username string) (int64, error) {
@@ -93,31 +184,19 @@ func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username st
 		return 0, err
 	}
 
-	err = i.createSpecificUserColls(context, u)
+	resourceQuery, resourceArgs, err := i.resourcesSubselect()
 	if err != nil {
 		return 0, err
 	}
 
-	// use plain squirrel here to retain ?-style args for embedding in the next query
-	resourceQuery, resourceArgs, err := squirrel.Select("storage_id").
-		From("storage_root_mapping").
-		Where(squirrel.Eq{"root_name": i.rootResourceNames}).
-		ToSql()
-
+	userCollsTable, err := i.createSpecificUserColls(context, u)
 	if err != nil {
 		return 0, err
 	}
 
 	// should this additionally return a timestamp, or even a semi-complete UserDataUsage object?
-	querys, args, err := psql.Select().
-		Column("SUM(d.data_size) AS file_volume").
-		From("r_user_main AS u").
-		Join("user_colls AS c ON c.user_name = u.user_name").
-		Join("r_data_main AS d ON d.coll_id = c.coll_id").
-		Where(squirrel.Eq{"u.user_type_name": "rodsuser"}).
-		Where(fmt.Sprintf("d.resc_id = ANY(ARRAY(%s))", resourceQuery), resourceArgs...).
+	querys, args, err := i.baseUsageQuery(userCollsTable, resourceQuery, resourceArgs).
 		Where(squirrel.Eq{"u.user_name": u}).
-		GroupBy("u.user_name").
 		Limit(1).
 		ToSql()
 
@@ -136,4 +215,98 @@ func (i *ICATDatabase) UserCurrentDataUsage(context context.Context, username st
 	}
 
 	return usage, nil
+}
+
+func (i *ICATDatabase) BatchCurrentDataUsage(context context.Context, start, end string) (map[string]int64, error) {
+	// Again, this should be a Tx
+	rv := make(map[string]int64)
+	s := i.UnqualifiedUsername(start)
+	e := i.UnqualifiedUsername(end)
+
+	err := i.createStorageRootMapping(context)
+	if err != nil {
+		return rv, err
+	}
+
+	resourceQuery, resourceArgs, err := i.resourcesSubselect()
+	if err != nil {
+		return rv, err
+	}
+
+	userCollsTable, err := i.createBatchUserColls(context, start, end)
+	if err != nil {
+		return rv, err
+	}
+
+	querys, args, err := i.baseUsageQuery(userCollsTable, resourceQuery, resourceArgs).
+		Where("u.user_name BETWEEN ? AND ?", s, e).
+		Column("u.user_name AS username").
+		ToSql()
+	if err != nil {
+		return rv, errors.Wrap(err, "Error formatting query")
+	}
+
+	log.Tracef("BatchCurrentDataUsage SQL: %s, %+v", querys, args)
+
+	rows, err := i.db.QueryxContext(context, querys, args...)
+	if err != nil {
+		return rv, errors.Wrap(err, "Error fetching usage for users")
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var uname string
+		var total int64
+		err = rows.Scan(&total, &uname)
+		if err != nil {
+			return rv, err
+		}
+		log.Tracef("Got %d for %s", total, uname)
+		rv[uname] = total
+	}
+	return rv, nil
+}
+
+func (i *ICATDatabase) GetUserBatchBounds(context context.Context, batchSize int) ([][]string, error) {
+	var bounds [][]string
+	prefix := "WITH users AS (SELECT row_number() OVER (ORDER BY user_name) AS n, user_name FROM r_user_main WHERE user_type_name = 'rodsuser')"
+	querys, args, err := psql.Select("n", "user_name").
+		From("users").
+		Where("n % ? = 0 OR (n - 1) % ? = 0", batchSize, batchSize).
+		Prefix(prefix).
+		Suffix("UNION ALL SELECT max(n), max(user_name) FROM users").
+		ToSql()
+
+	if err != nil {
+		return bounds, errors.Wrap(err, "Error formatting SQL query")
+	}
+
+	rows, err := i.db.QueryxContext(context, querys, args...)
+	if err != nil {
+		return bounds, errors.Wrap(err, "Error fetching user batch bounds")
+	}
+	defer rows.Close()
+
+	boundsMap := make(map[int]string)
+	maxN := 0
+	for rows.Next() {
+		var rown int
+		var username string
+		err = rows.Scan(&rown, &username)
+		if err != nil {
+			return bounds, err
+		}
+		boundsMap[rown] = username
+		maxN = rown
+	}
+	log.Tracef("%d %+v", maxN, boundsMap)
+
+	for i := 1; i < maxN; i = i + batchSize {
+		upperBound, ok := boundsMap[i+batchSize-1]
+		if !ok && i+batchSize > maxN {
+			upperBound = boundsMap[maxN]
+		}
+		bounds = append(bounds, []string{boundsMap[i], upperBound})
+	}
+
+	return bounds, nil
 }

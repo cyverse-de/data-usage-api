@@ -77,3 +77,32 @@ func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username st
 
 	return res, err
 }
+
+func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start, end string) error {
+	// should pass in qualified usernames, icatdb method will strip it as needed
+	usages, err := b.icatdb.BatchCurrentDataUsage(context, start, end)
+	if err != nil {
+		return err
+	}
+
+	log.Tracef("usages in batch: %+v", usages)
+
+	var us []string
+	usagesFixed := make(map[string]int64)
+	for usr, usg := range usages { // keys of usages map
+		us = append(us, b.icatdb.FixUsername(usr))
+		usagesFixed[b.icatdb.FixUsername(usr)] = usg
+	}
+
+	err = b.dedb.EnsureUsers(context, us)
+	if err != nil {
+		return errors.Wrap(err, "Error ensuring users exist")
+	}
+
+	_, err = b.dedb.AddUserDataUsageBatch(context, usagesFixed, time.Now())
+	if err != nil {
+		return errors.Wrap(err, "Error inserting new usage")
+	}
+
+	return nil
+}

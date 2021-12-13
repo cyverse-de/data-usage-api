@@ -48,6 +48,7 @@ amqp:
   exchange:
     name: de
     type: topic
+  batch_size: 100
 `
 
 func getQueueName(prefix string) string {
@@ -122,13 +123,14 @@ func main() {
 			var err error
 			log.Tracef("Got message: %s", del.RoutingKey)
 			if del.RoutingKey == "index.all" || del.RoutingKey == "index.usage.data" {
-				// generate prefixes and publish
-			} else if strings.HasPrefix(del.RoutingKey, "index.usage.data.batch.user") {
-				// handle batch
+				err = a.SendBatchMessages(del, dbconn, icatconn, publishClient, configuration)
+			} else if strings.HasPrefix(del.RoutingKey, a.BatchUserPrefix) {
+				err = a.UpdateUserBatchHandler(del, dbconn, icatconn, configuration)
 			} else if strings.HasPrefix(del.RoutingKey, a.SingleUserPrefix) {
 				err = a.UpdateUserHandler(del, dbconn, icatconn, configuration)
 			}
 			if err != nil {
+				log.Error(errors.Wrap(err, "Error handling message"))
 				return
 			}
 			err = del.Ack(false)
