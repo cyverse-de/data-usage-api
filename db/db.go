@@ -21,3 +21,9 @@ type DatabaseAccessor interface {
 	GetContext(context.Context, interface{}, string, ...interface{}) error
 	SelectContext(context.Context, interface{}, string, ...interface{}) error
 }
+
+func logStats(name string, db *sqlx.DB) {
+	stats := db.Stats()
+
+	log.Infof("%s stats: %d/%d open; %d/%d used/idle", name, stats.OpenConnections, stats.MaxOpenConnections, stats.InUse, stats.Idle)
+}

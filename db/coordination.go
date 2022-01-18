@@ -19,11 +19,13 @@ func NewBoth(dedb *DEDatabase, icatdb *ICATDatabase) *BothDatabases {
 }
 
 func NewBothTx(context context.Context, deconn *sqlx.DB, deschema string, icatconn *sqlx.DB, userSuffix, zone string, rootResourceNames []string) (*BothDatabases, func(), func() error, error) {
+	logStats("DE", deconn)
 	detx, err := deconn.BeginTxx(context, nil)
 	if err != nil {
 		return nil, func() {}, func() error { return err }, errors.Wrap(err, "Error creating DE database transaction")
 	}
 
+	logStats("ICAT", icatconn)
 	icattx, err := icatconn.BeginTxx(context, nil)
 	if err != nil {
 		return nil, func() {}, func() error { return err }, errors.Wrap(err, "Error creating ICAT transaction")
