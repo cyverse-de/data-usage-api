@@ -35,13 +35,14 @@ func NewBothTx(context context.Context, deconn *sqlx.DB, deschema string, icatco
 	icatdb := NewICAT(icattx, userSuffix, zone, rootResourceNames)
 
 	rb := func() {
+		alreadyDoneErr := "sql: transaction has already been committed or rolled back"
 		err := detx.Rollback()
-		if err != nil {
+		if err != nil && err.Error() != alreadyDoneErr {
 			e := errors.Wrap(err, "Error rolling back DE database transaction")
 			log.Error(e)
 		}
 		err = icattx.Rollback()
-		if err != nil {
+		if err != nil && err.Error() != alreadyDoneErr {
 			e := errors.Wrap(err, "Error rolling back ICAT transaction")
 			log.Error(e)
 		}
