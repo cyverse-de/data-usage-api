@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 )
@@ -31,7 +32,7 @@ func NewBothTx(context context.Context, deconn *sqlx.DB, deschema string, icatco
 		return nil, func() {}, func() error { return err }, errors.Wrap(err, "Error creating ICAT transaction")
 	}
 
-	dedb := NewDE(detx, deschema)
+	dedb := NewDE(detx, &config.Config{DBSchema: deschema})
 	icatdb := NewICAT(icattx, userSuffix, zone, rootResourceNames)
 
 	rb := func() {

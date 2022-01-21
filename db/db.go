@@ -22,6 +22,11 @@ type DatabaseAccessor interface {
 	SelectContext(context.Context, interface{}, string, ...interface{}) error
 }
 
+type DatabaseTxAccessor interface {
+	DatabaseAccessor
+	BeginTxx(context.Context, *sql.TxOptions) (*sqlx.Tx, error)
+}
+
 func logStats(name string, db *sqlx.DB) {
 	stats := db.Stats()
 
