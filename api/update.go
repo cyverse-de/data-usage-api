@@ -19,7 +19,7 @@ func (a *App) UpdateUserCurrentUsageHandler(c echo.Context) error {
 	}
 	user = util.FixUsername(user, a.configuration)
 
-	dbs, rb, commit, err := db.NewBothTx(context, a.dedb, a.configuration.DBSchema, a.icat, a.configuration.UserSuffix, a.configuration.Zone, a.configuration.RootResourceNames)
+	dbs, rb, commit, err := db.NewBothTx(context, a.dedb, a.icat, a.configuration)
 	if err != nil {
 		e := errors.Wrap(err, "Failed setting up database")
 		log.Error(e)

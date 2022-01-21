@@ -19,7 +19,7 @@ func NewBoth(dedb *DEDatabase, icatdb *ICATDatabase) *BothDatabases {
 	return &BothDatabases{dedb: dedb, icatdb: icatdb}
 }
 
-func NewBothTx(context context.Context, deconn *sqlx.DB, deschema string, icatconn *sqlx.DB, userSuffix, zone string, rootResourceNames []string) (*BothDatabases, func(), func() error, error) {
+func NewBothTx(context context.Context, deconn *sqlx.DB, icatconn *sqlx.DB, config *config.Config) (*BothDatabases, func(), func() error, error) {
 	logStats("DE", deconn)
 	detx, err := deconn.BeginTxx(context, nil)
 	if err != nil {
@@ -32,8 +32,8 @@ func NewBothTx(context context.Context, deconn *sqlx.DB, deschema string, icatco
 		return nil, func() {}, func() error { return err }, errors.Wrap(err, "Error creating ICAT transaction")
 	}
 
-	dedb := NewDE(detx, &config.Config{DBSchema: deschema})
-	icatdb := NewICAT(icattx, &config.Config{UserSuffix: userSuffix, Zone: zone, RootResourceNames: rootResourceNames})
+	dedb := NewDE(detx, config)
+	icatdb := NewICAT(icattx, config)
 
 	rb := func() {
 		alreadyDoneErr := "sql: transaction has already been committed or rolled back"

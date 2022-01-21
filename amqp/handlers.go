@@ -31,7 +31,7 @@ func UpdateUserHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuration *co
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	dbs, rb, commit, err := db.NewBothTx(ctx, dedb, configuration.DBSchema, icat, configuration.UserSuffix, configuration.Zone, configuration.RootResourceNames)
+	dbs, rb, commit, err := db.NewBothTx(ctx, dedb, icat, configuration)
 	if err != nil {
 		e := errors.Wrap(err, "Failed setting up database")
 		log.Error(e)
@@ -75,7 +75,7 @@ func UpdateUserBatchHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuratio
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	dbs, rb, commit, err := db.NewBothTx(ctx, dedb, configuration.DBSchema, icat, configuration.UserSuffix, configuration.Zone, configuration.RootResourceNames)
+	dbs, rb, commit, err := db.NewBothTx(ctx, dedb, icat, configuration)
 	if err != nil {
 		e := errors.Wrap(err, "Failed setting up database")
 		log.Error(e)
