@@ -115,7 +115,7 @@ func SendBatchMessages(del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *messa
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	i := db.NewICAT(icat, configuration.UserSuffix, configuration.Zone, configuration.RootResourceNames)
+	i := db.NewICAT(icat, configuration)
 	batches, err := i.GetUserBatchBounds(ctx, configuration.BatchSize)
 	if err != nil {
 		return errors.Wrap(err, "Failed getting user batch bounds")

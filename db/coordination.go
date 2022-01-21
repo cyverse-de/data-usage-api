@@ -33,7 +33,7 @@ func NewBothTx(context context.Context, deconn *sqlx.DB, deschema string, icatco
 	}
 
 	dedb := NewDE(detx, &config.Config{DBSchema: deschema})
-	icatdb := NewICAT(icattx, userSuffix, zone, rootResourceNames)
+	icatdb := NewICAT(icattx, &config.Config{UserSuffix: userSuffix, Zone: zone, RootResourceNames: rootResourceNames})
 
 	rb := func() {
 		alreadyDoneErr := "sql: transaction has already been committed or rolled back"

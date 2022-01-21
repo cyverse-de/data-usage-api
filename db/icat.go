@@ -13,22 +13,20 @@ import (
 )
 
 type ICATDatabase struct {
-	db                DatabaseAccessor
-	userSuffix        string
-	zone              string
-	rootResourceNames []string
+	db            DatabaseAccessor
+	configuration *config.Config
 }
 
-func NewICAT(db DatabaseAccessor, userSuffix, zone string, rootResourceNames []string) *ICATDatabase {
-	return &ICATDatabase{db: db, userSuffix: userSuffix, zone: zone, rootResourceNames: rootResourceNames}
+func NewICAT(db DatabaseAccessor, config *config.Config) *ICATDatabase {
+	return &ICATDatabase{db: db, configuration: config}
 }
 
 func (i *ICATDatabase) FixUsername(username string) string {
-	return util.FixUsername(username, &config.Config{UserSuffix: i.userSuffix})
+	return util.FixUsername(username, &config.Config{UserSuffix: i.configuration.UserSuffix})
 }
 
 func (i *ICATDatabase) UnqualifiedUsername(username string) string {
-	return strings.TrimSuffix(username, "@"+i.userSuffix)
+	return strings.TrimSuffix(username, "@"+i.configuration.UserSuffix)
 }
 
 func (i *ICATDatabase) createStorageRootMapping(context context.Context) error {
@@ -89,9 +87,9 @@ SELECT CASE WHEN coll_name LIKE '/' || $1 || '/home/%%' THEN REGEXP_REPLACE(coll
       OR coll_name =    '/' || $1 || '/trash/home/ipcservices/' || $2
 `, table)
 
-	log.Tracef("populateSpecificUserColls SQL: %s, [%s %s]", q, i.zone, username)
+	log.Tracef("populateSpecificUserColls SQL: %s, [%s %s]", q, i.configuration.Zone, username)
 
-	_, err := i.db.ExecContext(context, q, i.zone, username)
+	_, err := i.db.ExecContext(context, q, i.configuration.Zone, username)
 	if err != nil {
 		return errors.Wrap(err, "Error filling user_colls table for user")
 	}
@@ -116,9 +114,9 @@ SELECT CASE WHEN coll_name LIKE '/' || $1 || '/home/%%' THEN REGEXP_REPLACE(coll
       OR coll_name LIKE    '/' || $1 || '/trash/home/ipcservices/' || $3 || '/%%'
 `, table)
 
-	log.Tracef("populateSpecificUserColls SQL: %s, [%s %s %s]", q, i.zone, start, end)
+	log.Tracef("populateSpecificUserColls SQL: %s, [%s %s %s]", q, i.configuration.Zone, start, end)
 
-	_, err := i.db.ExecContext(context, q, i.zone, start, end)
+	_, err := i.db.ExecContext(context, q, i.configuration.Zone, start, end)
 	if err != nil {
 		return errors.Wrap(err, "Error filling user_colls table for batch")
 	}
@@ -160,7 +158,7 @@ func (i *ICATDatabase) resourcesSubselect() (string, []interface{}, error) {
 	// use plain squirrel here to retain ?-style args for embedding in the next query
 	return squirrel.Select("storage_id").
 		From("storage_root_mapping").
-		Where(squirrel.Eq{"root_name": i.rootResourceNames}).
+		Where(squirrel.Eq{"root_name": i.configuration.RootResourceNames}).
 		ToSql()
 }
 
