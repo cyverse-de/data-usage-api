@@ -25,9 +25,10 @@ type DatabaseAccessor interface {
 type DatabaseTxAccessor interface {
 	DatabaseAccessor
 	BeginTxx(context.Context, *sql.TxOptions) (*sqlx.Tx, error)
+	Stats() sql.DBStats
 }
 
-func logStats(name string, db *sqlx.DB) {
+func logStats(name string, db DatabaseTxAccessor) {
 	stats := db.Stats()
 
 	log.Infof("%s stats: %d/%d open; %d/%d used/idle", name, stats.OpenConnections, stats.MaxOpenConnections, stats.InUse, stats.Idle)

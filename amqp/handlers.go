@@ -31,30 +31,10 @@ func UpdateUserHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuration *co
 	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 	defer cancel()
 
-	dbs, rb, commit, err := db.NewBothTx(ctx, dedb, icat, configuration)
-	if err != nil {
-		e := errors.Wrap(err, "Failed setting up database")
-		log.Error(e)
-		rejectErr := del.Reject(!del.Redelivered)
-		if rejectErr != nil {
-			log.Error(errors.Wrap(rejectErr, "Failed rejecting failed message"))
-		}
-		return e
-	}
-	defer rb()
+	dbs := db.NewBoth(dedb, icat, configuration)
 
 	// no need to hold onto the response here
-	_, err = dbs.UpdateUserDataUsage(ctx, user)
-	if err != nil {
-		e := errors.Wrap(err, "Failed updating usage information")
-		log.Error(e)
-		rejectErr := del.Reject(!del.Redelivered)
-		if rejectErr != nil {
-			log.Error(errors.Wrap(rejectErr, "Failed rejecting failed message"))
-		}
-		return e
-	}
-	err = commit()
+	_, err := dbs.UpdateUserDataUsage(ctx, user)
 	if err != nil {
 		e := errors.Wrap(err, "Failed updating usage information")
 		log.Error(e)
@@ -75,29 +55,9 @@ func UpdateUserBatchHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuratio
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	dbs, rb, commit, err := db.NewBothTx(ctx, dedb, icat, configuration)
-	if err != nil {
-		e := errors.Wrap(err, "Failed setting up database")
-		log.Error(e)
-		rejectErr := del.Reject(!del.Redelivered)
-		if rejectErr != nil {
-			log.Error(errors.Wrap(rejectErr, "Failed rejecting failed message"))
-		}
-		return e
-	}
-	defer rb()
+	dbs := db.NewBoth(dedb, icat, configuration)
 
-	err = dbs.UpdateUserDataUsageBatch(ctx, usernames[0], usernames[1])
-	if err != nil {
-		e := errors.Wrap(err, "Failed updating usage information")
-		log.Error(e)
-		rejectErr := del.Reject(!del.Redelivered)
-		if rejectErr != nil {
-			log.Error(errors.Wrap(rejectErr, "Failed rejecting failed message"))
-		}
-		return e
-	}
-	err = commit()
+	err := dbs.UpdateUserDataUsageBatch(ctx, usernames[0], usernames[1])
 	if err != nil {
 		e := errors.Wrap(err, "Failed updating usage information")
 		log.Error(e)
