@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cyverse-de/configurate"
 	a "github.com/cyverse-de/data-usage-api/amqp"
@@ -90,7 +91,12 @@ func main() {
 	}
 
 	dbconn = sqlx.MustConnect("postgres", configuration.DBURI)
+	dbconn.SetMaxOpenConns(10)
+	dbconn.SetConnMaxIdleTime(time.Minute)
+
 	icatconn = sqlx.MustConnect("postgres", configuration.ICATURI)
+	icatconn.SetMaxOpenConns(10)
+	icatconn.SetConnMaxIdleTime(time.Minute)
 
 	// configure and start AMQP bits here
 	listenClient, err := messaging.NewClient(configuration.AMQPURI, true)

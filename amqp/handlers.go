@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/db"
@@ -27,7 +28,8 @@ func UpdateUserHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuration *co
 
 	log.Tracef("Recalculating usage for %s asynchronously", user)
 
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
 
 	dbs, rb, commit, err := db.NewBothTx(ctx, dedb, configuration.DBSchema, icat, configuration.UserSuffix, configuration.Zone, configuration.RootResourceNames)
 	if err != nil {
@@ -69,7 +71,9 @@ func UpdateUserHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuration *co
 func UpdateUserBatchHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuration *config.Config) error {
 	usernames := strings.SplitN(del.RoutingKey[len(BatchUserPrefix)+1:], ".", 2)
 	log.Infof("Updating the user batch from %s to %s", usernames[0], usernames[1])
-	ctx := context.Background()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	defer cancel()
 
 	dbs, rb, commit, err := db.NewBothTx(ctx, dedb, configuration.DBSchema, icat, configuration.UserSuffix, configuration.Zone, configuration.RootResourceNames)
 	if err != nil {
@@ -108,7 +112,9 @@ func UpdateUserBatchHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuratio
 }
 
 func SendBatchMessages(del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *messaging.Client, configuration *config.Config) error {
-	ctx := context.Background()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	defer cancel()
+
 	i := db.NewICAT(icat, configuration.UserSuffix, configuration.Zone, configuration.RootResourceNames)
 	batches, err := i.GetUserBatchBounds(ctx, configuration.BatchSize)
 	if err != nil {
