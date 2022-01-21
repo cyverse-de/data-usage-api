@@ -80,7 +80,7 @@ func (b *BothDatabases) ICATTx(ctx context.Context) (*ICATDatabase, error) {
 
 	icattx, err := b.icatconn.BeginTxx(ctx, nil)
 	if err != nil {
-		return nil, errors.Wrap(err, "Error creating DE transaction")
+		return nil, errors.Wrap(err, "Error creating ICAT transaction")
 	}
 
 	rb := func() {
