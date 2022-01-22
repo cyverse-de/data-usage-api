@@ -19,13 +19,7 @@ func (a *App) UpdateUserCurrentUsageHandler(c echo.Context) error {
 	}
 	user = util.FixUsername(user, a.configuration)
 
-	dbs, rb, commit, err := db.NewBothTx(context, a.dedb, a.configuration.DBSchema, a.icat, a.configuration.UserSuffix, a.configuration.Zone, a.configuration.RootResourceNames)
-	if err != nil {
-		e := errors.Wrap(err, "Failed setting up database")
-		log.Error(e)
-		return logging.ErrorResponse{Message: e.Error(), ErrorCode: "500", HTTPStatusCode: http.StatusInternalServerError}
-	}
-	defer rb()
+	dbs := db.NewBoth(a.dedb, a.icat, a.configuration)
 
 	res, err := dbs.UpdateUserDataUsage(context, user)
 	if err != nil {
@@ -33,12 +27,6 @@ func (a *App) UpdateUserCurrentUsageHandler(c echo.Context) error {
 		log.Error(e)
 		return logging.ErrorResponse{Message: e.Error(), ErrorCode: "500", HTTPStatusCode: http.StatusInternalServerError}
 
-	}
-	err = commit()
-	if err != nil {
-		e := errors.Wrap(err, "Failed updating usage information")
-		log.Error(e)
-		return logging.ErrorResponse{Message: e.Error(), ErrorCode: "500", HTTPStatusCode: http.StatusInternalServerError}
 	}
 
 	return c.JSON(http.StatusOK, res)

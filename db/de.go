@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Masterminds/squirrel"
+	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/pkg/errors"
 )
 
@@ -21,16 +22,16 @@ type UserDataUsage struct {
 }
 
 type DEDatabase struct {
-	db     DatabaseAccessor
-	schema string
+	db            DatabaseAccessor
+	configuration *config.Config
 }
 
-func NewDE(db DatabaseAccessor, schema string) *DEDatabase {
-	return &DEDatabase{db: db, schema: schema}
+func NewDE(db DatabaseAccessor, config *config.Config) *DEDatabase {
+	return &DEDatabase{db: db, configuration: config}
 }
 
 func (d *DEDatabase) Table(name, alias string) string {
-	return fmt.Sprintf("%s.%s AS %s", d.schema, name, alias)
+	return fmt.Sprintf("%s.%s AS %s", d.configuration.DBSchema, name, alias)
 }
 
 func (d *DEDatabase) baseUserUsageSelect() squirrel.SelectBuilder {

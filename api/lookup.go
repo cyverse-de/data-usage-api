@@ -23,7 +23,7 @@ func (a *App) UserCurrentUsageHandler(c echo.Context) error {
 	}
 	user = util.FixUsername(user, a.configuration)
 
-	dedb := db.NewDE(a.dedb, a.configuration.DBSchema)
+	dedb := db.NewDE(a.dedb, a.configuration)
 
 	res, err := dedb.UserCurrentDataUsage(context, user)
 
