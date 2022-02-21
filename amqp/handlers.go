@@ -33,6 +33,7 @@ type UsageUpdate struct {
 }
 
 func SendUserUsageUpdateMessage(res *db.UserDataUsage, amqpClient *messaging.Client) error {
+	log.Tracef("Sending user usage update message for %v", res)
 	update := &UsageUpdate{
 		Attribute: "data.size",
 		Value:     strconv.FormatInt(res.Total, 10),
@@ -53,6 +54,7 @@ func SendUserUsageUpdateMessage(res *db.UserDataUsage, amqpClient *messaging.Cli
 		log.Error(e)
 		return e
 	}
+	log.Trace("Done sending user usage update message")
 
 	return nil
 }
