@@ -2,7 +2,9 @@ package amqp
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -22,7 +24,42 @@ var log = logging.Log.WithFields(logrus.Fields{"package": "amqp"})
 const SingleUserPrefix = "index.usage.data.user"
 const BatchUserPrefix = "index.usage.data.batch.user"
 
-func UpdateUserHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuration *config.Config) error {
+type UsageUpdate struct {
+	Attribute string `json:"attribute"`
+	Value     string `json:"value"`
+	Unit      string `json:"unit"`
+	Username  string `json:"username"`
+	UserID    string `json:"user_id"`
+}
+
+func SendUserUsageUpdateMessage(res *db.UserDataUsage, amqpClient *messaging.Client) error {
+	log.Tracef("Sending user usage update message for %v", res)
+	update := &UsageUpdate{
+		Attribute: "data.size",
+		Value:     strconv.FormatInt(res.Total, 10),
+		Unit:      "bytes",
+		Username:  res.Username,
+		UserID:    res.UserID,
+	}
+	marshalled, err := json.Marshal(update)
+	if err != nil {
+		e := errors.Wrap(err, "Failed marshalling JSON AMQP message")
+		log.Error(e)
+		return e
+	}
+
+	err = amqpClient.Publish("qms.usages", marshalled)
+	if err != nil {
+		e := errors.Wrap(err, "Failed sending usage update AMQP message")
+		log.Error(e)
+		return e
+	}
+	log.Trace("Done sending user usage update message")
+
+	return nil
+}
+
+func UpdateUserHandler(del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *messaging.Client, configuration *config.Config) error {
 	username := del.RoutingKey[len(SingleUserPrefix)+1:]
 	user := util.FixUsername(username, configuration)
 
@@ -33,8 +70,7 @@ func UpdateUserHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuration *co
 
 	dbs := db.NewBoth(dedb, icat, configuration)
 
-	// no need to hold onto the response here
-	_, err := dbs.UpdateUserDataUsage(ctx, user)
+	res, err := dbs.UpdateUserDataUsage(ctx, user)
 	if err != nil {
 		e := errors.Wrap(err, "Failed updating usage information")
 		log.Error(e)
@@ -45,10 +81,15 @@ func UpdateUserHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuration *co
 		return e
 	}
 
+	err = SendUserUsageUpdateMessage(res, amqpClient)
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
-func UpdateUserBatchHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuration *config.Config) error {
+func UpdateUserBatchHandler(del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *messaging.Client, configuration *config.Config) error {
 	usernames := strings.SplitN(del.RoutingKey[len(BatchUserPrefix)+1:], ".", 2)
 	log.Infof("Updating the user batch from %s to %s", usernames[0], usernames[1])
 
@@ -57,7 +98,7 @@ func UpdateUserBatchHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuratio
 
 	dbs := db.NewBoth(dedb, icat, configuration)
 
-	err := dbs.UpdateUserDataUsageBatch(ctx, usernames[0], usernames[1])
+	res, err := dbs.UpdateUserDataUsageBatch(ctx, usernames[0], usernames[1])
 	if err != nil {
 		e := errors.Wrap(err, "Failed updating usage information")
 		log.Error(e)
@@ -66,6 +107,13 @@ func UpdateUserBatchHandler(del amqp.Delivery, dedb, icat *sqlx.DB, configuratio
 			log.Error(errors.Wrap(rejectErr, "Failed rejecting failed message"))
 		}
 		return e
+	}
+
+	for _, r := range res {
+		err = SendUserUsageUpdateMessage(r, amqpClient)
+		if err != nil {
+			return err
+		}
 	}
 
 	return nil
