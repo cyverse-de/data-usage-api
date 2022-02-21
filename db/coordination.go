@@ -161,17 +161,17 @@ func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username st
 	return res, err
 }
 
-func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start, end string) error {
+func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start, end string) ([]*UserDataUsage, error) {
 	// should pass in qualified usernames, icatdb method will strip it as needed
 	icatdb, err := b.ICATTx(context)
 	if err != nil {
-		return errors.Wrap(err, "Error creating ICAT transaction")
+		return nil, errors.Wrap(err, "Error creating ICAT transaction")
 	}
 	defer b.ICATRollback()
 
 	usages, err := icatdb.BatchCurrentDataUsage(context, start, end)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	b.ICATRollback()
 
@@ -186,26 +186,26 @@ func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start,
 
 	dedb, err := b.DETx(context)
 	if err != nil {
-		return errors.Wrap(err, "Error creating DE database transaction")
+		return nil, errors.Wrap(err, "Error creating DE database transaction")
 	}
 	defer b.DERollback()
 
 	err = dedb.EnsureUsers(context, us)
 	if err != nil {
-		return errors.Wrap(err, "Error ensuring users exist")
+		return nil, errors.Wrap(err, "Error ensuring users exist")
 	}
 
-	_, err = dedb.AddUserDataUsageBatch(context, usagesFixed, time.Now())
+	res, err := dedb.AddUserDataUsageBatch(context, usagesFixed, time.Now())
 	if err != nil {
-		return errors.Wrap(err, "Error inserting new usage")
+		return nil, errors.Wrap(err, "Error inserting new usage")
 	}
 
 	err = b.DECommit()
 	if err != nil {
 		e := errors.Wrap(err, "Error committing DE transaction")
 		log.Error(e)
-		return e
+		return nil, e
 	}
 
-	return nil
+	return res, nil
 }

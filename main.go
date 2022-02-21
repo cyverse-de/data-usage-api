@@ -131,9 +131,9 @@ func main() {
 			if del.RoutingKey == "index.all" || del.RoutingKey == "index.usage.data" {
 				err = a.SendBatchMessages(del, dbconn, icatconn, publishClient, configuration)
 			} else if strings.HasPrefix(del.RoutingKey, a.BatchUserPrefix) {
-				err = a.UpdateUserBatchHandler(del, dbconn, icatconn, configuration)
+				err = a.UpdateUserBatchHandler(del, dbconn, icatconn, publishClient, configuration)
 			} else if strings.HasPrefix(del.RoutingKey, a.SingleUserPrefix) {
-				err = a.UpdateUserHandler(del, dbconn, icatconn, configuration)
+				err = a.UpdateUserHandler(del, dbconn, icatconn, publishClient, configuration)
 			}
 			if err != nil {
 				log.Error(errors.Wrap(err, "Error handling message"))
