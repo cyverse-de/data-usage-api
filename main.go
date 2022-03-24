@@ -22,6 +22,9 @@ import (
 	"github.com/spf13/viper"
 	"github.com/streadway/amqp"
 
+	"github.com/uptrace/opentelemetry-go-extra/otelsql"
+	"github.com/uptrace/opentelemetry-go-extra/otelsqlx"
+
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/jaeger"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -146,11 +149,13 @@ func main() {
 		log.Fatal(err)
 	}
 
-	dbconn = sqlx.MustConnect("postgres", configuration.DBURI)
+	dbconn = otelsqlx.MustConnect("postgres", configuration.DBURI,
+		otelsql.WithAttributes(semconv.DBSystemPostgreSQL))
 	dbconn.SetMaxOpenConns(10)
 	dbconn.SetConnMaxIdleTime(time.Minute)
 
-	icatconn = sqlx.MustConnect("postgres", configuration.ICATURI)
+	icatconn = otelsqlx.MustConnect("postgres", configuration.ICATURI,
+		otelsql.WithAttributes(semconv.DBSystemPostgreSQL))
 	icatconn.SetMaxOpenConns(10)
 	icatconn.SetConnMaxIdleTime(time.Minute)
 
