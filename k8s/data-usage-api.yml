@@ -60,7 +60,7 @@ spec:
             valueFrom:
               secretKeyRef:
                 name: configs
-                key: OTEL_EXPORTER_JAEGER_ENDPOINT
+                key: OTEL_EXPORTER_JAEGER_HTTP_ENDPOINT
         ports:
           - name: listen-port
             containerPort: 60000
