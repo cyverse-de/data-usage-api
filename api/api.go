@@ -7,6 +7,7 @@ import (
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
 )
 
 // nolint - for now
@@ -31,6 +32,8 @@ func New(dedb *sqlx.DB, icat *sqlx.DB, amqp *messaging.Client, configuration *co
 }
 
 func (a *App) Router() *echo.Echo {
+	a.router.Use(otelecho.Middleware("data-usage-api"))
+
 	a.router.HTTPErrorHandler = logging.HTTPErrorHandler
 	a.router.GET("/", a.GreetingHandler).Name = "greeting"
 
