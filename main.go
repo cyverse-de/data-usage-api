@@ -15,7 +15,7 @@ import (
 	"github.com/cyverse-de/data-usage-api/api"
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/logging"
-	"github.com/cyverse-de/messaging"
+	"github.com/cyverse-de/messaging/v9"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -190,10 +190,8 @@ func main() {
 		configuration.AMQPExchangeType,
 		queueName,
 		[]string{"index.all", "index.usage.data", "index.usage.data.batch.user.#", a.SingleUserPrefix + ".#"},
-		func(del amqp.Delivery) {
+		func(ctx context.Context, del amqp.Delivery) {
 			var err error
-			ctx, span := otel.Tracer(otelName).Start(context.Background(), queueName+" process")
-			defer span.End()
 
 			log.Tracef("Got message: %s", del.RoutingKey)
 			if del.RoutingKey == "index.all" || del.RoutingKey == "index.usage.data" {

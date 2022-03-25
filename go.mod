@@ -5,14 +5,14 @@ go 1.17
 require (
 	github.com/Masterminds/squirrel v1.5.2
 	github.com/cyverse-de/configurate v0.0.0-20210914212501-fc18b48e00a9
-	github.com/cyverse-de/messaging v8.2.0+incompatible
+	github.com/cyverse-de/messaging/v9 v9.0.1
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/labstack/echo/v4 v4.7.0
 	github.com/lib/pq v1.10.4
 	github.com/pkg/errors v0.8.1
 	github.com/sirupsen/logrus v1.8.1
 	github.com/spf13/viper v1.9.0
-	github.com/streadway/amqp v1.0.0
+	github.com/streadway/amqp v1.0.1-0.20200716223359-e6b33f460591
 	github.com/uptrace/opentelemetry-go-extra/otelsql v0.1.10
 	github.com/uptrace/opentelemetry-go-extra/otelsqlx v0.1.10
 	go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho v0.30.0

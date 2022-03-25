@@ -3,7 +3,7 @@ package api
 import (
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/logging"
-	"github.com/cyverse-de/messaging"
+	"github.com/cyverse-de/messaging/v9"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"

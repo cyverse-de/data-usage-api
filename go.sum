@@ -70,8 +70,8 @@ github.com/coreos/go-systemd/v22 v22.3.2/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSV
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/cyverse-de/configurate v0.0.0-20210914212501-fc18b48e00a9 h1:jP5qovGyyjCn9/1KFOzTPLlHk0XUFvJpF1wavZzEnss=
 github.com/cyverse-de/configurate v0.0.0-20210914212501-fc18b48e00a9/go.mod h1:WHo3kihlw77gqpWScUucrBgAV0t63mkoc3uD6GXnMBo=
-github.com/cyverse-de/messaging v8.2.0+incompatible h1:KveH1IEsfpsSMzvOB873Br2yzujw3/1BNcwkXihRJRU=
-github.com/cyverse-de/messaging v8.2.0+incompatible/go.mod h1:P8+11w9KLDLVt4zlLI0iIvqj4Byj3098+S3xxFuXxwY=
+github.com/cyverse-de/messaging/v9 v9.0.1 h1:7qlAZSzQlvumu4uhg8Xci+AwEw9fWXT9WoDvyXV0Qcw=
+github.com/cyverse-de/messaging/v9 v9.0.1/go.mod h1:yLCtyWNv2I2NsccVoxgvCB6Q/bdwKNb3w5SIEu+BYJY=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1 h1:vj9j/u1bqnvCEfJOwUhtlOARqs3+rkHYY13jYWTU97c=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -302,8 +302,8 @@ github.com/spf13/pflag v1.0.5/go.mod h1:McXfInJRrz4CZXVZOBLb0bTZqETkiAhM9Iw0y3An
 github.com/spf13/viper v1.8.1/go.mod h1:o0Pch8wJ9BVSWGQMbra6iw0oQ5oktSIBaujf1rJH9Ns=
 github.com/spf13/viper v1.9.0 h1:yR6EXjTp0y0cLN8OZg1CRZmOBdI88UcGkhgyJhu6nZk=
 github.com/spf13/viper v1.9.0/go.mod h1:+i6ajR7OX2XaiBkrcZJFK21htRk7eDeLg7+O6bhUPP4=
-github.com/streadway/amqp v1.0.0 h1:kuuDrUJFZL1QYL9hUNuCxNObNzB0bV/ZG5jV3RWAQgo=
-github.com/streadway/amqp v1.0.0/go.mod h1:AZpEONHx3DKn8O/DFsRAY58/XVQiIPMTMB1SddzLXVw=
+github.com/streadway/amqp v1.0.1-0.20200716223359-e6b33f460591 h1:DY61wv7mWBLELSYAGfxjItovf7QQKxjLBSFldNbLS/Q=
+github.com/streadway/amqp v1.0.1-0.20200716223359-e6b33f460591/go.mod h1:AZpEONHx3DKn8O/DFsRAY58/XVQiIPMTMB1SddzLXVw=
 github.com/stretchr/objx v0.1.0 h1:4G4v2dO3VZwixGIRoQ5Lfboy6nUhCyYzaqnIAPPhYs4=
 github.com/stretchr/objx v0.1.0/go.mod h1:HFkY916IF+rwdDfMAkV7OtwuqBVzrE8GR6GFx+wExME=
 github.com/stretchr/testify v1.2.2/go.mod h1:a8OnRcib4nhh0OaRAV+Yts87kKdq0PP7pXfy6kDkUVs=

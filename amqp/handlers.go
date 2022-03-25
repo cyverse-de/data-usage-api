@@ -12,7 +12,7 @@ import (
 	"github.com/cyverse-de/data-usage-api/db"
 	"github.com/cyverse-de/data-usage-api/logging"
 	"github.com/cyverse-de/data-usage-api/util"
-	"github.com/cyverse-de/messaging"
+	"github.com/cyverse-de/messaging/v9"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
@@ -53,7 +53,7 @@ func SendUserUsageUpdateMessage(ctx context.Context, res *db.UserDataUsage, amqp
 		return e
 	}
 
-	err = amqpClient.Publish("qms.usages", marshalled)
+	err = amqpClient.PublishContext(ctx, "qms.usages", marshalled)
 	if err != nil {
 		e := errors.Wrap(err, "Failed sending usage update AMQP message")
 		log.Error(e)
@@ -147,7 +147,7 @@ func SendBatchMessages(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.
 	for _, batch := range batches {
 		start := i.UnqualifiedUsername(batch[0])
 		end := i.UnqualifiedUsername(batch[1])
-		err = amqpClient.Publish(fmt.Sprintf("index.usage.data.batch.user.%s.%s", start, end), []byte{})
+		err = amqpClient.PublishContext(ctx, fmt.Sprintf("index.usage.data.batch.user.%s.%s", start, end), []byte{})
 		if err != nil {
 			log.Error(errors.Wrap(err, fmt.Sprintf("Error publishing message for batch %s - %s", start, end)))
 			overall_error = err
