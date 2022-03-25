@@ -30,7 +30,7 @@ func (a *App) UpdateUserCurrentUsageHandler(c echo.Context) error {
 
 	}
 
-	err = amqp.SendUserUsageUpdateMessage(res, a.amqp)
+	err = amqp.SendUserUsageUpdateMessage(context, res, a.amqp)
 	if err != nil {
 		log.Error(err)
 	}

@@ -35,6 +35,8 @@ import (
 	_ "github.com/lib/pq"
 )
 
+const otelName = "github.com/cyverse-de/data-usage-api"
+
 var log = logging.Log.WithFields(logrus.Fields{"package": "main"})
 
 const defaultConfig = `
@@ -190,13 +192,16 @@ func main() {
 		[]string{"index.all", "index.usage.data", "index.usage.data.batch.user.#", a.SingleUserPrefix + ".#"},
 		func(del amqp.Delivery) {
 			var err error
+			ctx, span := otel.Tracer(otelName).Start(context.Background(), queueName+" process")
+			defer span.End()
+
 			log.Tracef("Got message: %s", del.RoutingKey)
 			if del.RoutingKey == "index.all" || del.RoutingKey == "index.usage.data" {
-				err = a.SendBatchMessages(del, dbconn, icatconn, publishClient, configuration)
+				err = a.SendBatchMessages(ctx, del, dbconn, icatconn, publishClient, configuration)
 			} else if strings.HasPrefix(del.RoutingKey, a.BatchUserPrefix) {
-				err = a.UpdateUserBatchHandler(del, dbconn, icatconn, publishClient, configuration)
+				err = a.UpdateUserBatchHandler(ctx, del, dbconn, icatconn, publishClient, configuration)
 			} else if strings.HasPrefix(del.RoutingKey, a.SingleUserPrefix) {
-				err = a.UpdateUserHandler(del, dbconn, icatconn, publishClient, configuration)
+				err = a.UpdateUserHandler(ctx, del, dbconn, icatconn, publishClient, configuration)
 			}
 			if err != nil {
 				log.Error(errors.Wrap(err, "Error handling message"))

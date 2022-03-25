@@ -17,8 +17,10 @@ import (
 	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
+	"go.opentelemetry.io/otel"
 )
 
+var otelName = "github.com/cyverse-de/data-usage-api/amqp"
 var log = logging.Log.WithFields(logrus.Fields{"package": "amqp"})
 
 const SingleUserPrefix = "index.usage.data.user"
@@ -32,7 +34,10 @@ type UsageUpdate struct {
 	UserID    string `json:"user_id"`
 }
 
-func SendUserUsageUpdateMessage(res *db.UserDataUsage, amqpClient *messaging.Client) error {
+func SendUserUsageUpdateMessage(ctx context.Context, res *db.UserDataUsage, amqpClient *messaging.Client) error {
+	ctx, span := otel.Tracer(otelName).Start(ctx, "SendUserUsageUpdateMessage")
+	defer span.End()
+
 	log.Tracef("Sending user usage update message for %v", res)
 	update := &UsageUpdate{
 		Attribute: "data.size",
@@ -59,14 +64,17 @@ func SendUserUsageUpdateMessage(res *db.UserDataUsage, amqpClient *messaging.Cli
 	return nil
 }
 
-func UpdateUserHandler(del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *messaging.Client, configuration *config.Config) error {
+func UpdateUserHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *messaging.Client, configuration *config.Config) error {
 	username := del.RoutingKey[len(SingleUserPrefix)+1:]
 	user := util.FixUsername(username, configuration)
 
 	log.Tracef("Recalculating usage for %s asynchronously", user)
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
+
+	ctx, span := otel.Tracer(otelName).Start(ctx, "UpdateUserHandler")
+	defer span.End()
 
 	dbs := db.NewBoth(dedb, icat, configuration)
 
@@ -81,7 +89,7 @@ func UpdateUserHandler(del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *messa
 		return e
 	}
 
-	err = SendUserUsageUpdateMessage(res, amqpClient)
+	err = SendUserUsageUpdateMessage(ctx, res, amqpClient)
 	if err != nil {
 		return err
 	}
@@ -89,12 +97,15 @@ func UpdateUserHandler(del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *messa
 	return nil
 }
 
-func UpdateUserBatchHandler(del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *messaging.Client, configuration *config.Config) error {
+func UpdateUserBatchHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *messaging.Client, configuration *config.Config) error {
 	usernames := strings.SplitN(del.RoutingKey[len(BatchUserPrefix)+1:], ".", 2)
 	log.Infof("Updating the user batch from %s to %s", usernames[0], usernames[1])
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Minute)
 	defer cancel()
+
+	ctx, span := otel.Tracer(otelName).Start(ctx, "UpdateUserBatchHandler")
+	defer span.End()
 
 	dbs := db.NewBoth(dedb, icat, configuration)
 
@@ -110,7 +121,7 @@ func UpdateUserBatchHandler(del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *
 	}
 
 	for _, r := range res {
-		err = SendUserUsageUpdateMessage(r, amqpClient)
+		err = SendUserUsageUpdateMessage(ctx, r, amqpClient)
 		if err != nil {
 			return err
 		}
@@ -119,9 +130,12 @@ func UpdateUserBatchHandler(del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *
 	return nil
 }
 
-func SendBatchMessages(del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *messaging.Client, configuration *config.Config) error {
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+func SendBatchMessages(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *messaging.Client, configuration *config.Config) error {
+	ctx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
+
+	ctx, span := otel.Tracer(otelName).Start(ctx, "SendBatchMessages")
+	defer span.End()
 
 	i := db.NewICAT(icat, configuration)
 	batches, err := i.GetUserBatchBounds(ctx, configuration.BatchSize)
