@@ -10,6 +10,7 @@ import (
 	"github.com/Masterminds/squirrel"
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/pkg/errors"
+	"go.opentelemetry.io/otel"
 )
 
 type UserDataUsage struct {
@@ -63,17 +64,21 @@ func (d *DEDatabase) doUserUsage(context context.Context, query squirrel.Sqlizer
 
 func (d *DEDatabase) UserCurrentDataUsage(context context.Context, username string) (*UserDataUsage, error) {
 	log.Tracef("Getting data usage for %s", username)
+	ctx, span := otel.Tracer(otelName).Start(context, "UserCurrentDataUsage")
+	defer span.End()
 
 	query := d.baseUserUsageSelect().
 		Where("u.username = ?", username).
 		OrderBy("d.time DESC").
 		Limit(1)
 
-	return d.doUserUsage(context, query)
+	return d.doUserUsage(ctx, query)
 }
 
 func (d *DEDatabase) AddUserDataUsage(context context.Context, username string, total int64, time time.Time) (*UserDataUsage, error) {
 	log.Tracef("Inserting for %s: %d at %s", username, total, time)
+	ctx, span := otel.Tracer(otelName).Start(context, "AddUserDataUsage")
+	defer span.End()
 
 	query := psql.Insert(d.Table("user_data_usage", "d")).
 		Columns("total", "time", "user_id").
@@ -86,11 +91,14 @@ func (d *DEDatabase) AddUserDataUsage(context context.Context, username string, 
 		).
 		Suffix("RETURNING d.id, d.total, d.user_id, (SELECT username from users WHERE id = d.user_id) as username, d.time AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS time, d.last_modified AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS last_modified")
 
-	return d.doUserUsage(context, query)
+	return d.doUserUsage(ctx, query)
 }
 
 func (d *DEDatabase) AddUserDataUsageBatch(context context.Context, usages map[string]int64, time time.Time) ([]*UserDataUsage, error) {
 	log.Tracef("Inserting usages: %+v at %s", usages, time)
+	ctx, span := otel.Tracer(otelName).Start(context, "AddUserDataUsageBatch")
+	defer span.End()
+
 	var placeholders []string
 	var startargs []interface{}
 	for usr, usg := range usages {
@@ -120,7 +128,7 @@ func (d *DEDatabase) AddUserDataUsageBatch(context context.Context, usages map[s
 
 	var rv []*UserDataUsage
 
-	err = d.db.SelectContext(context, &rv, querys, args...)
+	err = d.db.SelectContext(ctx, &rv, querys, args...)
 	if err == sql.ErrNoRows {
 		return nil, err
 	} else if err != nil {
@@ -132,6 +140,9 @@ func (d *DEDatabase) AddUserDataUsageBatch(context context.Context, usages map[s
 
 func (d *DEDatabase) EnsureUsers(context context.Context, users []string) error {
 	log.Tracef("Ensuring users %+v", users)
+	ctx, span := otel.Tracer(otelName).Start(context, "EnsureUsers")
+	defer span.End()
+
 	// Users passed here should already have the user suffix
 	for _, user := range users {
 		if !strings.Contains(user, "@") {
@@ -153,7 +164,7 @@ func (d *DEDatabase) EnsureUsers(context context.Context, users []string) error 
 
 	log.Tracef("EnsureUsers SQL: %s, %+v", qs, args)
 
-	_, err = d.db.ExecContext(context, qs, args...)
+	_, err = d.db.ExecContext(ctx, qs, args...)
 	if err != nil {
 		return errors.Wrap(err, "Error inserting users")
 	}

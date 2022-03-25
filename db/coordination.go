@@ -8,6 +8,8 @@ import (
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/util"
 	"github.com/pkg/errors"
+
+	"go.opentelemetry.io/otel"
 )
 
 type BothDatabases struct {
@@ -116,13 +118,16 @@ func (b *BothDatabases) ICATTx(ctx context.Context) (*ICATDatabase, error) {
 }
 
 func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username string) (*UserDataUsage, error) {
-	icatdb, err := b.ICATTx(context)
+	ctx, span := otel.Tracer(otelName).Start(context, "UpdateUserDataUsage")
+	defer span.End()
+
+	icatdb, err := b.ICATTx(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error creating ICAT transaction")
 	}
 	defer b.ICATRollback()
 
-	usagenum, err := icatdb.UserCurrentDataUsage(context, username)
+	usagenum, err := icatdb.UserCurrentDataUsage(ctx, username)
 	if err == sql.ErrNoRows {
 		usagenum = 0
 		log.Infof("No usage information was found for user %s. Attempting to add a usage of 0 anyway", username)
@@ -134,13 +139,13 @@ func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username st
 	// if this update shouldn't be added, or should amend a prior reading, do it here or in the method called below
 	// or maybe have an async cleanup process that deduplicates readings
 
-	dedb, err := b.DETx(context)
+	dedb, err := b.DETx(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error creating DE database transaction")
 	}
 	defer b.DERollback()
 
-	res, err := dedb.AddUserDataUsage(context, username, usagenum, time.Now())
+	res, err := dedb.AddUserDataUsage(ctx, username, usagenum, time.Now())
 	if err == sql.ErrNoRows {
 		e := errors.Wrap(err, "No data could be inserted. Perhaps the user doesn't exist in the DE database")
 		log.Error(e)
@@ -162,14 +167,17 @@ func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username st
 }
 
 func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start, end string) ([]*UserDataUsage, error) {
+	ctx, span := otel.Tracer(otelName).Start(context, "UpdateUserDataUsageBatch")
+	defer span.End()
+
 	// should pass in qualified usernames, icatdb method will strip it as needed
-	icatdb, err := b.ICATTx(context)
+	icatdb, err := b.ICATTx(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error creating ICAT transaction")
 	}
 	defer b.ICATRollback()
 
-	usages, err := icatdb.BatchCurrentDataUsage(context, start, end)
+	usages, err := icatdb.BatchCurrentDataUsage(ctx, start, end)
 	if err != nil {
 		return nil, err
 	}
@@ -184,18 +192,18 @@ func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start,
 		usagesFixed[util.FixUsername(usr, b.configuration)] = usg
 	}
 
-	dedb, err := b.DETx(context)
+	dedb, err := b.DETx(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error creating DE database transaction")
 	}
 	defer b.DERollback()
 
-	err = dedb.EnsureUsers(context, us)
+	err = dedb.EnsureUsers(ctx, us)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error ensuring users exist")
 	}
 
-	res, err := dedb.AddUserDataUsageBatch(context, usagesFixed, time.Now())
+	res, err := dedb.AddUserDataUsageBatch(ctx, usagesFixed, time.Now())
 	if err != nil {
 		return nil, errors.Wrap(err, "Error inserting new usage")
 	}

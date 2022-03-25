@@ -12,6 +12,8 @@ import (
 
 var log = logging.Log.WithFields(logrus.Fields{"package": "db"})
 
+const otelName = "github.com/cyverse-de/data-usage-api/db"
+
 var psql squirrel.StatementBuilderType = squirrel.StatementBuilder.PlaceholderFormat(squirrel.Dollar)
 
 type DatabaseAccessor interface {
