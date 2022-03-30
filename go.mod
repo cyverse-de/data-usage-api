@@ -5,7 +5,7 @@ go 1.17
 require (
 	github.com/Masterminds/squirrel v1.5.2
 	github.com/cyverse-de/configurate v0.0.0-20210914212501-fc18b48e00a9
-	github.com/cyverse-de/messaging/v9 v9.1.3
+	github.com/cyverse-de/messaging/v9 v9.1.4
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/labstack/echo/v4 v4.7.0
 	github.com/lib/pq v1.10.4
