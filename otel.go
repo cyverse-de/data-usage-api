@@ -89,15 +89,15 @@ func tracerProviderFromEnv(ctx context.Context, serviceName string, onErr func(e
 		}
 	}
 
-	return shutdownTracerProviderFn(tracerProvider, ctx)
+	return shutdownTracerProviderFn(tracerProvider, ctx, onErr)
 }
 
-func shutdownTracerProviderFn(tracerProvider *tracesdk.TracerProvider, tracerContext context.Context) func() {
+func shutdownTracerProviderFn(tracerProvider *tracesdk.TracerProvider, tracerContext context.Context, onErr func(error)) func() {
 	return func() {
 		ctx, cancel := context.WithTimeout(tracerContext, time.Second*5)
 		defer cancel()
 		if err := tracerProvider.Shutdown(ctx); err != nil {
-			log.Fatal(err)
+			onErr(err)
 		}
 	}
 }
