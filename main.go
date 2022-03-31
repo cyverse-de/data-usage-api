@@ -29,7 +29,6 @@ import (
 	_ "github.com/lib/pq"
 )
 
-const otelName = "github.com/cyverse-de/data-usage-api"
 const serviceName = "data-usage-api"
 
 var log = logging.Log.WithFields(logrus.Fields{"package": "main"})
