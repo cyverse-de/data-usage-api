@@ -87,7 +87,7 @@ func main() {
 
 	tracerCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	shutdown := tracerProviderFromEnv(tracerCtx, serviceName, func(e error) { log.Fatal(e) })
+	shutdown := TracerProviderFromEnv(tracerCtx, serviceName, func(e error) { log.Fatal(e) })
 	defer shutdown()
 
 	log.Infof("config path is %s", *configPath)

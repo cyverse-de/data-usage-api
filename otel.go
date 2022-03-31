@@ -71,23 +71,29 @@ func jaegerTracerProvider(ctx context.Context, serviceName, url string) (*traces
 
 // Get a TracerProvider using the OTEL_* environment variables to determine
 // configuration. Currently, only supports a Jaeger exporter.
-func tracerProviderFromEnv(ctx context.Context, serviceName string, onErr func(error)) func() {
-	var tracerProvider *tracesdk.TracerProvider
+func TracerProviderFromEnv(ctx context.Context, serviceName string, onErr func(error)) func() {
+	var (
+		tracerProvider *tracesdk.TracerProvider
+		err            error
+	)
 
 	otelTracesExporter := os.Getenv("OTEL_TRACES_EXPORTER")
 	if otelTracesExporter == "jaeger" {
 		jaegerEndpoint := os.Getenv("OTEL_EXPORTER_JAEGER_ENDPOINT")
 		if jaegerEndpoint == "" {
 			onErr(errors.New("Jaeger set as OpenTelemetry trace exporter, but no Jaeger endpoint configured."))
+			return func() {}
 		} else {
-			tracerProvider, err := jaegerTracerProvider(ctx, serviceName, jaegerEndpoint)
+			tracerProvider, err = jaegerTracerProvider(ctx, serviceName, jaegerEndpoint)
 			if err != nil {
 				onErr(err)
+				return func() {}
 			}
-			otel.SetTracerProvider(tracerProvider)
-			otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 		}
 	}
+
+	otel.SetTracerProvider(tracerProvider)
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
 
 	return shutdownTracerProviderFn(tracerProvider, ctx, onErr)
 }
