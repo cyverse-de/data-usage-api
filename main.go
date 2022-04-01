@@ -24,6 +24,7 @@ import (
 	"github.com/uptrace/opentelemetry-go-extra/otelsql"
 	"github.com/uptrace/opentelemetry-go-extra/otelsqlx"
 
+	"github.com/cyverse-de/go-mod/otelutils"
 	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 
 	_ "github.com/lib/pq"
@@ -86,7 +87,7 @@ func main() {
 
 	tracerCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	shutdown := TracerProviderFromEnv(tracerCtx, serviceName, func(e error) { log.Fatal(e) })
+	shutdown := otelutils.TracerProviderFromEnv(tracerCtx, serviceName, func(e error) { log.Fatal(e) })
 	defer shutdown()
 
 	log.Infof("config path is %s", *configPath)
