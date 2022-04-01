@@ -105,6 +105,8 @@ github.com/cyverse-de/configurate v0.0.0-20210914212501-fc18b48e00a9 h1:jP5qovGy
 github.com/cyverse-de/configurate v0.0.0-20210914212501-fc18b48e00a9/go.mod h1:WHo3kihlw77gqpWScUucrBgAV0t63mkoc3uD6GXnMBo=
 github.com/cyverse-de/go-mod/otelutils v0.0.0-20220401211629-ca64236b63cc h1:/zQFsvQr6Mdyu0N6vW82qXKHwb+JzKrIQU9beyCDruc=
 github.com/cyverse-de/go-mod/otelutils v0.0.0-20220401211629-ca64236b63cc/go.mod h1:8P2jRGnvUsH4qtyVP0W6KiV5iSr102pLkzKFgkYJ4og=
+github.com/cyverse-de/go-mod/otelutils v0.0.1 h1:DAkj2tn8umxM7j9+zokrsQK/q5HTWQT8YjuE1+4xruE=
+github.com/cyverse-de/go-mod/otelutils v0.0.1/go.mod h1:8P2jRGnvUsH4qtyVP0W6KiV5iSr102pLkzKFgkYJ4og=
 github.com/cyverse-de/messaging/v9 v9.1.4 h1:DRMqWWT6nAGAnCk2Ajcikm13CJimttgQ5ClrvEA5UNw=
 github.com/cyverse-de/messaging/v9 v9.1.4/go.mod h1:bGZRCqilJTPBmWrgsyuupi3KRgkjQNs8yYNxZWZh8DI=
 github.com/cyverse-de/model/v6 v6.0.1 h1:6c0Tkl0hIbaJj7paI872QAPyvX9bhZNH93o37zDZG0s=
