@@ -5,7 +5,7 @@ go 1.17
 require (
 	github.com/Masterminds/squirrel v1.5.2
 	github.com/cyverse-de/configurate v0.0.0-20210914212501-fc18b48e00a9
-	github.com/cyverse-de/go-mod/otelutils v0.0.1
+	github.com/cyverse-de/go-mod/otelutils v0.0.2
 	github.com/cyverse-de/messaging/v9 v9.1.4
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/labstack/echo/v4 v4.7.0
@@ -52,7 +52,7 @@ require (
 	go.opentelemetry.io/otel/trace v1.6.1 // indirect
 	golang.org/x/crypto v0.0.0-20211108221036-ceb1ce70b4fa // indirect
 	golang.org/x/net v0.0.0-20211015210444-4f30a5c0130f // indirect
-	golang.org/x/sys v0.0.0-20220330033206-e17cdc41300f // indirect
+	golang.org/x/sys v0.0.0-20220403205710-6acee93ad0eb // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20201208040808-7e3f01d25324 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
