@@ -14,6 +14,9 @@ import (
 	"github.com/cyverse-de/data-usage-api/api"
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/logging"
+	"github.com/cyverse-de/data-usage-api/nc"
+	"github.com/nats-io/nats.go"
+
 	"github.com/cyverse-de/messaging/v9"
 	"github.com/jmoiron/sqlx"
 	"github.com/pkg/errors"
@@ -24,6 +27,8 @@ import (
 	"github.com/uptrace/opentelemetry-go-extra/otelsql"
 	"github.com/uptrace/opentelemetry-go-extra/otelsqlx"
 
+	decfg "github.com/cyverse-de/go-mod/cfg"
+	"github.com/cyverse-de/go-mod/gotelnats"
 	"github.com/cyverse-de/go-mod/otelutils"
 	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 
@@ -77,9 +82,19 @@ func main() {
 		configuration *config.Config
 		app           *api.App
 
-		configPath = flag.String("config", "/etc/iplant/de/data-usage-api.yml", "Full path to the configuration file")
-		listenPort = flag.Int("port", 60000, "The port the service listens on for requests")
-		logLevel   = flag.String("log-level", "info", "One of trace, debug, info, warn, error, fatal, or panic.")
+		configPath    = flag.String("config", "/etc/iplant/de/data-usage-api.yml", "Full path to the configuration file")
+		listenPort    = flag.Int("port", 60000, "The port the service listens on for requests")
+		logLevel      = flag.String("log-level", "info", "One of trace, debug, info, warn, error, fatal, or panic.")
+		dotEnvPath    = flag.String("dotenv-path", decfg.DefaultDotEnvPath, "Path to the dotenv file")
+		tlsCert       = flag.String("tlscert", gotelnats.DefaultTLSCertPath, "Path to the NATS TLS cert file")
+		tlsKey        = flag.String("tlskey", gotelnats.DefaultTLSKeyPath, "Path to the NATS TLS key file")
+		caCert        = flag.String("tlsca", gotelnats.DefaultTLSCAPath, "Path to the NATS TLS CA file")
+		credsPath     = flag.String("creds", gotelnats.DefaultCredsPath, "Path to the NATS creds file")
+		maxReconnects = flag.Int("max-reconnects", gotelnats.DefaultMaxReconnects, "Maximum number of reconnection attempts to NATS")
+		reconnectWait = flag.Int("reconnect-wait", gotelnats.DefaultReconnectWait, "Seconds to wait between reconnection attempts to NATS")
+		envPrefix     = flag.String("env-prefix", decfg.DefaultEnvPrefix, "The prefix for environment variables")
+		natsSubject   = flag.String("nats-subject", "cyverse.data.usage.>", "The subject prefix for NATS subscriptions")
+		natsQueue     = flag.String("nats-queue", "cyverse.data.usage", "The name of the NATS queue")
 	)
 
 	flag.Parse()
@@ -104,6 +119,57 @@ func main() {
 		log.Fatal(err)
 	}
 
+	// read in NATS configuration from the dotenv file.
+	envCfg, err := decfg.Init(&decfg.Settings{
+		EnvPrefix:   *envPrefix,
+		ConfigPath:  *configPath,
+		DotEnvPath:  *dotEnvPath,
+		StrictMerge: false,
+		FileType:    decfg.YAML,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	// set up NATS connection
+	natsCluster := envCfg.String("nats.cluster")
+	if natsCluster == "" {
+		log.Fatalf("The %sNATS_CLUSTER environment variable or nats.cluster configuration value must be set", *envPrefix)
+	}
+
+	log.Infof("nats.cluster is set to '%s'", natsCluster)
+	log.Infof("NATS TLS cert file is %s", *tlsCert)
+	log.Infof("NATS TLS key file is %s", *tlsKey)
+	log.Infof("NATS CA cert file is %s", *caCert)
+	log.Infof("NATS creds file is %s", *credsPath)
+	log.Infof("NATS max reconnects is %d", *maxReconnects)
+	log.Infof("NATS reonnect wait is %t", *reconnectWait)
+
+	natsConn, err := nc.NewConnector(&nc.ConnectorSettings{
+		BaseSubject:   *natsSubject,
+		BaseQueue:     *natsQueue,
+		NATSCluster:   natsCluster,
+		CredsPath:     *credsPath,
+		TLSKeyPath:    *tlsKey,
+		TLSCertPath:   *tlsCert,
+		MaxReconnects: *maxReconnects,
+		ReconnectWait: *reconnectWait,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	natsConn.Subscribe("ping", func(m *nats.Msg) {
+		log.Info("ping message received")
+		err := m.Respond([]byte("pong"))
+		if err != nil {
+			log.Error(err)
+		}
+	})
+
+	log.Info("connected to nats cluster")
+
+	// set up database connection
 	dbconn = otelsqlx.MustConnect("postgres", configuration.DBURI,
 		otelsql.WithAttributes(semconv.DBSystemPostgreSQL))
 	dbconn.SetMaxOpenConns(10)
@@ -113,6 +179,8 @@ func main() {
 		otelsql.WithAttributes(semconv.DBSystemPostgreSQL))
 	icatconn.SetMaxOpenConns(10)
 	icatconn.SetConnMaxIdleTime(time.Minute)
+
+	// set up the NATS connection
 
 	// configure and start AMQP bits here
 	listenClient, err := messaging.NewClient(configuration.AMQPURI, true)
