@@ -152,6 +152,7 @@ func main() {
 		CredsPath:     *credsPath,
 		TLSKeyPath:    *tlsKey,
 		TLSCertPath:   *tlsCert,
+		CAPath:        *caCert,
 		MaxReconnects: *maxReconnects,
 		ReconnectWait: *reconnectWait,
 	})
