@@ -1,4 +1,4 @@
-package nc
+package natsconn
 
 import (
 	"fmt"

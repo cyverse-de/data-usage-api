@@ -34,7 +34,21 @@ type UsageUpdate struct {
 	UserID    string `json:"user_id"`
 }
 
-func SendUserUsageUpdateMessage(ctx context.Context, res *db.UserDataUsage, amqpClient *messaging.Client) error {
+type Updater struct {
+	amqpClient *messaging.Client
+}
+
+func NewUpdater(c *messaging.Client) *Updater {
+	return &Updater{
+		amqpClient: c,
+	}
+}
+
+type UsageUpdateMessenger interface {
+	SendUserUsageUpdateMessage(context.Context, *db.UserDataUsage) error
+}
+
+func (u *Updater) SendUserUsageUpdateMessage(ctx context.Context, res *db.UserDataUsage) error {
 	ctx, span := otel.Tracer(otelName).Start(ctx, "SendUserUsageUpdateMessage")
 	defer span.End()
 
@@ -53,7 +67,7 @@ func SendUserUsageUpdateMessage(ctx context.Context, res *db.UserDataUsage, amqp
 		return e
 	}
 
-	err = amqpClient.PublishContext(ctx, "qms.usages", marshalled)
+	err = u.amqpClient.PublishContext(ctx, "qms.usages", marshalled)
 	if err != nil {
 		e := errors.Wrap(err, "Failed sending usage update AMQP message")
 		log.Error(e)
@@ -64,7 +78,7 @@ func SendUserUsageUpdateMessage(ctx context.Context, res *db.UserDataUsage, amqp
 	return nil
 }
 
-func UpdateUserHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *messaging.Client, configuration *config.Config) error {
+func UpdateUserHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.DB, updater UsageUpdateMessenger, configuration *config.Config) error {
 	username := del.RoutingKey[len(SingleUserPrefix)+1:]
 	user := util.FixUsername(username, configuration)
 
@@ -89,7 +103,7 @@ func UpdateUserHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.
 		return e
 	}
 
-	err = SendUserUsageUpdateMessage(ctx, res, amqpClient)
+	err = updater.SendUserUsageUpdateMessage(ctx, res)
 	if err != nil {
 		return err
 	}
@@ -97,7 +111,7 @@ func UpdateUserHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.
 	return nil
 }
 
-func UpdateUserBatchHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.DB, amqpClient *messaging.Client, configuration *config.Config) error {
+func UpdateUserBatchHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.DB, updater UsageUpdateMessenger, configuration *config.Config) error {
 	usernames := strings.SplitN(del.RoutingKey[len(BatchUserPrefix)+1:], ".", 2)
 	log.Infof("Updating the user batch from %s to %s", usernames[0], usernames[1])
 
@@ -121,7 +135,7 @@ func UpdateUserBatchHandler(ctx context.Context, del amqp.Delivery, dedb, icat *
 	}
 
 	for _, r := range res {
-		err = SendUserUsageUpdateMessage(ctx, r, amqpClient)
+		err = updater.SendUserUsageUpdateMessage(ctx, r)
 		if err != nil {
 			return err
 		}

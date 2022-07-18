@@ -13,8 +13,9 @@ import (
 	a "github.com/cyverse-de/data-usage-api/amqp"
 	"github.com/cyverse-de/data-usage-api/api"
 	"github.com/cyverse-de/data-usage-api/config"
+	"github.com/cyverse-de/data-usage-api/db"
 	"github.com/cyverse-de/data-usage-api/logging"
-	"github.com/cyverse-de/data-usage-api/nc"
+	"github.com/cyverse-de/data-usage-api/natsconn"
 	"github.com/nats-io/nats.go"
 
 	"github.com/cyverse-de/messaging/v9"
@@ -71,6 +72,10 @@ func getQueueName(prefix string) string {
 		return fmt.Sprintf("%s.%s", prefix, serviceName)
 	}
 	return serviceName
+}
+
+type UsageUpdateMessenger interface {
+	SendUserUsageUpdateMessage(context.Context, *db.UserDataUsage) error
 }
 
 func main() {
@@ -145,7 +150,7 @@ func main() {
 	log.Infof("NATS max reconnects is %d", *maxReconnects)
 	log.Infof("NATS reonnect wait is %t", *reconnectWait)
 
-	natsConn, err := nc.NewConnector(&nc.ConnectorSettings{
+	natsConn, err := natsconn.NewConnector(&natsconn.ConnectorSettings{
 		BaseSubject:   *natsSubject,
 		BaseQueue:     *natsQueue,
 		NATSCluster:   natsCluster,
@@ -203,6 +208,8 @@ func main() {
 
 	go listenClient.Listen()
 
+	updater := a.NewUpdater(publishClient)
+
 	queueName := getQueueName(configuration.AMQPQueuePrefix)
 	listenClient.AddConsumerMulti(
 		configuration.AMQPExchangeName,
@@ -216,9 +223,9 @@ func main() {
 			if del.RoutingKey == "index.all" || del.RoutingKey == "index.usage.data" {
 				err = a.SendBatchMessages(ctx, del, dbconn, icatconn, publishClient, configuration)
 			} else if strings.HasPrefix(del.RoutingKey, a.BatchUserPrefix) {
-				err = a.UpdateUserBatchHandler(ctx, del, dbconn, icatconn, publishClient, configuration)
+				err = a.UpdateUserBatchHandler(ctx, del, dbconn, icatconn, updater, configuration)
 			} else if strings.HasPrefix(del.RoutingKey, a.SingleUserPrefix) {
-				err = a.UpdateUserHandler(ctx, del, dbconn, icatconn, publishClient, configuration)
+				err = a.UpdateUserHandler(ctx, del, dbconn, icatconn, updater, configuration)
 			}
 			if err != nil {
 				log.Error(errors.Wrap(err, "Error handling message"))
