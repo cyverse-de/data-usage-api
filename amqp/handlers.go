@@ -157,17 +157,17 @@ func SendBatchMessages(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.
 		return errors.Wrap(err, "Failed getting user batch bounds")
 	}
 	log.Tracef("batches: %+v", batches)
-	var overall_error error
+	var overallError error
 	for _, batch := range batches {
 		start := i.UnqualifiedUsername(batch[0])
 		end := i.UnqualifiedUsername(batch[1])
 		err = amqpClient.PublishContext(ctx, fmt.Sprintf("index.usage.data.batch.user.%s.%s", start, end), []byte{})
 		if err != nil {
 			log.Error(errors.Wrap(err, fmt.Sprintf("Error publishing message for batch %s - %s", start, end)))
-			overall_error = err
+			overallError = err
 			// continue anyway though in case it's specific to this one batch
 		}
 
 	}
-	return overall_error
+	return overallError
 }

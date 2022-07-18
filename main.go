@@ -13,7 +13,6 @@ import (
 	a "github.com/cyverse-de/data-usage-api/amqp"
 	"github.com/cyverse-de/data-usage-api/api"
 	"github.com/cyverse-de/data-usage-api/config"
-	"github.com/cyverse-de/data-usage-api/db"
 	"github.com/cyverse-de/data-usage-api/logging"
 	"github.com/cyverse-de/data-usage-api/natsconn"
 	"github.com/nats-io/nats.go"
@@ -72,10 +71,6 @@ func getQueueName(prefix string) string {
 		return fmt.Sprintf("%s.%s", prefix, serviceName)
 	}
 	return serviceName
-}
-
-type UsageUpdateMessenger interface {
-	SendUserUsageUpdateMessage(context.Context, *db.UserDataUsage) error
 }
 
 func main() {

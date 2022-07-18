@@ -1,10 +1,14 @@
 package natsconn
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/cyverse-de/data-usage-api/db"
+	"github.com/cyverse-de/go-mod/gotelnats"
+	"github.com/cyverse-de/go-mod/pbinit"
 	"github.com/cyverse-de/go-mod/protobufjson"
 	"github.com/labstack/gommon/log"
 	"github.com/nats-io/nats.go"
@@ -92,4 +96,10 @@ func NewConnector(cs *ConnectorSettings) (*Connector, error) {
 	}
 
 	return connector, nil
+}
+
+func (nc *Connector) SendUserUsageUpdateMessage(ctx context.Context, res *db.UserDataUsage) error {
+	return gotelnats.Publish(ctx, nc.Conn, "cyverse.qms.user.usages.add",
+		pbinit.NewAddUsage(res.Username, "data.size", "ADD", float64(res.Total)),
+	)
 }
