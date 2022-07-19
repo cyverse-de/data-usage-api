@@ -143,7 +143,7 @@ func main() {
 	log.Infof("NATS CA cert file is %s", *caCert)
 	log.Infof("NATS creds file is %s", *credsPath)
 	log.Infof("NATS max reconnects is %d", *maxReconnects)
-	log.Infof("NATS reonnect wait is %t", *reconnectWait)
+	log.Infof("NATS reonnect wait is %d", *reconnectWait)
 
 	natsConn, err := natsconn.NewConnector(&natsconn.ConnectorSettings{
 		BaseSubject:   *natsSubject,
@@ -204,7 +204,9 @@ func main() {
 
 	go listenClient.Listen()
 
-	updater := a.NewUpdater(publishClient)
+	// Controls whether the usage updates go out over AMQP to qms-adapter or
+	// over NATS directly to QMS.
+	updater := natsConn // value of natsConn uses NATS, amqp.NewUpdater(publishClient) uses AMQP.
 
 	queueName := getQueueName(configuration.AMQPQueuePrefix)
 	listenClient.AddConsumerMulti(
