@@ -160,13 +160,18 @@ func main() {
 		log.Fatal(err)
 	}
 
-	natsConn.Subscribe("ping", func(m *nats.Msg) {
+	ssubject, squeue, err := natsConn.Subscribe("ping", func(m *nats.Msg) {
 		log.Info("ping message received")
 		err := m.Respond([]byte("pong"))
 		if err != nil {
 			log.Error(err)
 		}
 	})
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	log.Infof("subscribed to %s on queue %s via NATS", ssubject, squeue)
 
 	log.Info("connected to nats cluster")
 
