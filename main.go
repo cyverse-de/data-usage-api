@@ -181,8 +181,6 @@ func main() {
 	icatconn.SetMaxOpenConns(10)
 	icatconn.SetConnMaxIdleTime(time.Minute)
 
-	// set up the NATS connection
-
 	// configure and start AMQP bits here
 	listenClient, err := messaging.NewClient(configuration.AMQPURI, true)
 	if err != nil {
