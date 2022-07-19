@@ -3,7 +3,6 @@ package api
 import (
 	"net/http"
 
-	"github.com/cyverse-de/data-usage-api/amqp"
 	"github.com/cyverse-de/data-usage-api/db"
 	"github.com/cyverse-de/data-usage-api/logging"
 	"github.com/cyverse-de/data-usage-api/util"
@@ -27,11 +26,9 @@ func (a *App) UpdateUserCurrentUsageHandler(c echo.Context) error {
 		e := errors.Wrap(err, "Failed updating usage information")
 		log.Error(e)
 		return logging.ErrorResponse{Message: e.Error(), ErrorCode: "500", HTTPStatusCode: http.StatusInternalServerError}
-
 	}
 
-	u := amqp.NewUpdater(a.amqp)
-	err = u.SendUserUsageUpdateMessage(context, res)
+	err = a.updater.SendUserUsageUpdateMessage(context, res)
 	if err != nil {
 		log.Error(err)
 	}

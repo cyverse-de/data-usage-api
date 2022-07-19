@@ -237,7 +237,7 @@ func main() {
 	// - listen for index.usage.data.batch.user.<start>.<end>, and update the usage information for users from <start> to <end>, inclusive
 	// - listen for index.usage.data.user.<username>, and update the usage information for just that user
 
-	app = api.New(dbconn, icatconn, publishClient, configuration)
+	app = api.New(dbconn, icatconn, publishClient, updater, configuration)
 
 	log.Infof("listening on port %d", *listenPort)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), app.Router()))

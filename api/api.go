@@ -1,6 +1,7 @@
 package api
 
 import (
+	"github.com/cyverse-de/data-usage-api/amqp"
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/logging"
 	"github.com/cyverse-de/messaging/v9"
@@ -18,15 +19,17 @@ type App struct {
 	icat          *sqlx.DB
 	router        *echo.Echo
 	amqp          *messaging.Client
+	updater       amqp.UsageUpdateMessenger
 	configuration *config.Config
 }
 
-func New(dedb *sqlx.DB, icat *sqlx.DB, amqp *messaging.Client, configuration *config.Config) *App {
+func New(dedb *sqlx.DB, icat *sqlx.DB, amqp *messaging.Client, updater amqp.UsageUpdateMessenger, configuration *config.Config) *App {
 	return &App{
 		dedb:          dedb,
 		icat:          icat,
 		router:        echo.New(),
 		amqp:          amqp,
+		updater:       updater,
 		configuration: configuration,
 	}
 }
