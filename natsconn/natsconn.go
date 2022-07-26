@@ -6,10 +6,13 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/db"
+	"github.com/cyverse-de/data-usage-api/util"
 	"github.com/cyverse-de/go-mod/gotelnats"
 	"github.com/cyverse-de/go-mod/pbinit"
 	"github.com/cyverse-de/go-mod/protobufjson"
+	"github.com/cyverse-de/p/go/qms"
 	"github.com/labstack/gommon/log"
 	"github.com/nats-io/nats.go"
 )
@@ -102,4 +105,31 @@ func (nc *Connector) SendUserUsageUpdateMessage(ctx context.Context, res *db.Use
 	return gotelnats.Publish(ctx, nc.Conn, "cyverse.qms.user.usages.add",
 		pbinit.NewAddUsage(res.Username, "data.size", "ADD", float64(res.Total)),
 	)
+}
+
+func (nc *Connector) AllResourceOveragesForUser(ctx context.Context, config *config.Config, username string) (*qms.OverageList, error) {
+	var err error
+
+	subject := "cyverse.qms.user.overages.get"
+
+	req := &qms.AllUserOveragesRequest{
+		Username: util.FixUsername(username, config),
+	}
+
+	_, span := pbinit.InitAllUserOveragesRequest(req, subject)
+	defer span.End()
+
+	resp := pbinit.NewOverageList()
+
+	if err = gotelnats.Request(
+		ctx,
+		nc.Conn,
+		subject,
+		req,
+		resp,
+	); err != nil {
+		return nil, err
+	}
+
+	return resp, nil
 }

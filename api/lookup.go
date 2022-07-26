@@ -52,3 +52,30 @@ func (a *App) UserCurrentUsageHandler(c echo.Context) error {
 
 	return c.JSON(http.StatusOK, res)
 }
+
+func (a *App) UserDataOverageHandler(c echo.Context) error {
+	context := c.Request().Context()
+
+	user := c.Param("username")
+	if user == "" {
+		return logging.ErrorResponse{Message: "No username provided", ErrorCode: "400", HTTPStatusCode: http.StatusBadRequest}
+	}
+	user = util.FixUsername(user, a.configuration)
+
+	overages, err := a.nc.AllResourceOveragesForUser(context, a.configuration, user)
+	if err != nil {
+		e := errors.Wrap(err, "failed getting all resource overages")
+		log.Error(e)
+		return logging.ErrorResponse{Message: e.Error(), ErrorCode: "500", HTTPStatusCode: http.StatusInternalServerError}
+	}
+
+	hasDataOverage := false
+
+	for _, overage := range overages.Overages {
+		if overage.ResourceName == "data.size" {
+			hasDataOverage = true
+		}
+	}
+
+	return c.JSON(http.StatusOK, map[string]bool{"has_data_overage": hasDataOverage})
+}

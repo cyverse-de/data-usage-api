@@ -28,7 +28,7 @@ func (a *App) UpdateUserCurrentUsageHandler(c echo.Context) error {
 		return logging.ErrorResponse{Message: e.Error(), ErrorCode: "500", HTTPStatusCode: http.StatusInternalServerError}
 	}
 
-	err = a.updater.SendUserUsageUpdateMessage(context, res)
+	err = a.nc.SendUserUsageUpdateMessage(context, res)
 	if err != nil {
 		log.Error(err)
 	}

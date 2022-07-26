@@ -11,6 +11,7 @@ import (
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/db"
 	"github.com/cyverse-de/data-usage-api/logging"
+	"github.com/cyverse-de/data-usage-api/natsconn"
 	"github.com/cyverse-de/data-usage-api/util"
 	"github.com/cyverse-de/messaging/v9"
 	"github.com/jmoiron/sqlx"
@@ -78,7 +79,7 @@ func (u *Updater) SendUserUsageUpdateMessage(ctx context.Context, res *db.UserDa
 	return nil
 }
 
-func UpdateUserHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.DB, updater UsageUpdateMessenger, configuration *config.Config) error {
+func UpdateUserHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.DB, nc *natsconn.Connector, configuration *config.Config) error {
 	username := del.RoutingKey[len(SingleUserPrefix)+1:]
 	user := util.FixUsername(username, configuration)
 
@@ -103,7 +104,7 @@ func UpdateUserHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.
 		return e
 	}
 
-	err = updater.SendUserUsageUpdateMessage(ctx, res)
+	err = nc.SendUserUsageUpdateMessage(ctx, res)
 	if err != nil {
 		return err
 	}
@@ -111,7 +112,7 @@ func UpdateUserHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.
 	return nil
 }
 
-func UpdateUserBatchHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.DB, updater UsageUpdateMessenger, configuration *config.Config) error {
+func UpdateUserBatchHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.DB, nc *natsconn.Connector, configuration *config.Config) error {
 	usernames := strings.SplitN(del.RoutingKey[len(BatchUserPrefix)+1:], ".", 2)
 	log.Infof("Updating the user batch from %s to %s", usernames[0], usernames[1])
 
@@ -135,7 +136,7 @@ func UpdateUserBatchHandler(ctx context.Context, del amqp.Delivery, dedb, icat *
 	}
 
 	for _, r := range res {
-		err = updater.SendUserUsageUpdateMessage(ctx, r)
+		err = nc.SendUserUsageUpdateMessage(ctx, r)
 		if err != nil {
 			return err
 		}

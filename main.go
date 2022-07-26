@@ -207,10 +207,6 @@ func main() {
 
 	go listenClient.Listen()
 
-	// Controls whether the usage updates go out over AMQP to qms-adapter or
-	// over NATS directly to QMS.
-	updater := natsConn // value of natsConn uses NATS, amqp.NewUpdater(publishClient) uses AMQP.
-
 	queueName := getQueueName(configuration.AMQPQueuePrefix)
 	listenClient.AddConsumerMulti(
 		configuration.AMQPExchangeName,
@@ -224,9 +220,9 @@ func main() {
 			if del.RoutingKey == "index.all" || del.RoutingKey == "index.usage.data" {
 				err = a.SendBatchMessages(ctx, del, dbconn, icatconn, publishClient, configuration)
 			} else if strings.HasPrefix(del.RoutingKey, a.BatchUserPrefix) {
-				err = a.UpdateUserBatchHandler(ctx, del, dbconn, icatconn, updater, configuration)
+				err = a.UpdateUserBatchHandler(ctx, del, dbconn, icatconn, natsConn, configuration)
 			} else if strings.HasPrefix(del.RoutingKey, a.SingleUserPrefix) {
-				err = a.UpdateUserHandler(ctx, del, dbconn, icatconn, updater, configuration)
+				err = a.UpdateUserHandler(ctx, del, dbconn, icatconn, natsConn, configuration)
 			}
 			if err != nil {
 				log.Error(errors.Wrap(err, "Error handling message"))
@@ -242,7 +238,7 @@ func main() {
 	// - listen for index.usage.data.batch.user.<start>.<end>, and update the usage information for users from <start> to <end>, inclusive
 	// - listen for index.usage.data.user.<username>, and update the usage information for just that user
 
-	app = api.New(dbconn, icatconn, publishClient, updater, configuration)
+	app = api.New(dbconn, icatconn, publishClient, natsConn, configuration)
 
 	log.Infof("listening on port %d", *listenPort)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), app.Router()))

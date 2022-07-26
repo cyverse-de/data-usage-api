@@ -11,6 +11,7 @@ require (
 	github.com/cyverse-de/go-mod/pbinit v0.0.3
 	github.com/cyverse-de/go-mod/protobufjson v0.0.3
 	github.com/cyverse-de/messaging/v9 v9.1.4
+	github.com/cyverse-de/p/go/qms v0.0.6
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/labstack/echo/v4 v4.7.0
 	github.com/labstack/gommon v0.3.1
@@ -29,7 +30,6 @@ require (
 require (
 	github.com/cyverse-de/model/v6 v6.0.1 // indirect
 	github.com/cyverse-de/p/go/header v0.0.1 // indirect
-	github.com/cyverse-de/p/go/qms v0.0.6 // indirect
 	github.com/cyverse-de/p/go/svcerror v0.0.5 // indirect
 	github.com/fsnotify/fsnotify v1.5.1 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
