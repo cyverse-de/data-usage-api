@@ -13,6 +13,7 @@ spec:
         de-app: data-usage-api
         app: de
     spec:
+      serviceAccount: configurator
       affinity:
         podAntiAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
