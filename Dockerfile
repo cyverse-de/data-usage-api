@@ -1,6 +1,6 @@
-FROM golang:1.17 as build-root
+FROM golang:1.18 as build-root
 
-WORKDIR /build
+WORKDIR /go/src/github.com/cyverse-de/data-usage-api
 
 COPY go.mod .
 COPY go.sum .
@@ -11,7 +11,9 @@ ENV CGO_ENABLED=0
 ENV GOOS=linux
 ENV GOARCH=amd64
 
-RUN go install -v ./...
+RUN go build --buildvcs=false .
+RUN go clean -cache -modcache
+RUN cp ./data-usage-api /bin/data-usage-api
 
 ENTRYPOINT ["data-usage-api"]
 
