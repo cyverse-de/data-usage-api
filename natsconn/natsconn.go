@@ -103,7 +103,7 @@ func NewConnector(cs *ConnectorSettings) (*Connector, error) {
 
 func (nc *Connector) SendUserUsageUpdateMessage(ctx context.Context, res *db.UserDataUsage) error {
 	return gotelnats.Publish(ctx, nc.Conn, "cyverse.qms.user.usages.add",
-		pbinit.NewAddUsage(res.Username, "data.size", "ADD", float64(res.Total)),
+		pbinit.NewAddUsage(res.Username, "data.size", "SET", float64(res.Total)),
 	)
 }
 
