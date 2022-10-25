@@ -80,11 +80,12 @@ func (i *ICATDatabase) populateSpecificUserColls(context context.Context, userna
 	ctx, span := otel.Tracer(otelName).Start(context, "populateSpecificUserColls")
 	defer span.End()
 
+	// subfolders of /trash/home need to come first or their contents all get assigned to the subfolder name
 	q := fmt.Sprintf(`INSERT INTO %s (user_name, coll_id)
 SELECT CASE WHEN coll_name LIKE '/' || $1 || '/home/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/home/([^/]+).*', E'\\1')
-            WHEN coll_name LIKE '/' || $1 || '/trash/home/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/([^/]+).*', E'\\1')
 	    WHEN coll_name LIKE '/' || $1 || '/trash/home/de-irods/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/de-irods/([^/]+).*', E'\\1')
 	    WHEN coll_name LIKE '/' || $1 || '/trash/home/ipcservices/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/ipcservices/([^/]+).*', E'\\1')
+            WHEN coll_name LIKE '/' || $1 || '/trash/home/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/([^/]+).*', E'\\1')
        END, coll_id
     FROM r_coll_main
    WHERE coll_name LIKE '/' || $1 || '/home/' || $2 || '/%%'
@@ -112,9 +113,9 @@ func (i *ICATDatabase) populateBatchUserColls(context context.Context, start, en
 
 	q := fmt.Sprintf(`INSERT INTO %s (user_name, coll_id)
 SELECT CASE WHEN coll_name LIKE '/' || $1 || '/home/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/home/([^/]+).*', E'\\1')
-            WHEN coll_name LIKE '/' || $1 || '/trash/home/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/([^/]+).*', E'\\1')
 	    WHEN coll_name LIKE '/' || $1 || '/trash/home/de-irods/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/de-irods/([^/]+).*', E'\\1')
 	    WHEN coll_name LIKE '/' || $1 || '/trash/home/ipcservices/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/ipcservices/([^/]+).*', E'\\1')
+            WHEN coll_name LIKE '/' || $1 || '/trash/home/%%' THEN REGEXP_REPLACE(coll_name, '/' || $1 || '/trash/home/([^/]+).*', E'\\1')
        END, coll_id
     FROM r_coll_main
    WHERE coll_name BETWEEN '/' || $1 || '/home/' || $2 AND '/' || $1 || '/home/' || $3
