@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strconv"
 	"strings"
 	"time"
@@ -153,7 +154,15 @@ func SendBatchMessages(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.
 	defer span.End()
 
 	i := db.NewICAT(icat, configuration)
-	batches, err := i.GetUserBatchBounds(ctx, configuration.BatchSize)
+
+	rand.Seed(time.Now().UnixNano())
+	// Randomly add a number between -2 and 2
+	// i.e. in [0,5) minus 2
+	// This makes the bounds different each run, which will help us catch 0
+	// values that might otherwise repeatedly fall between batch bounds
+	boundModifier := rand.Intn(5) - 2
+
+	batches, err := i.GetUserBatchBounds(ctx, configuration.BatchSize+boundModifier)
 	if err != nil {
 		return errors.Wrap(err, "Failed getting user batch bounds")
 	}
