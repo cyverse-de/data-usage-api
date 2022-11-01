@@ -118,6 +118,11 @@ func (d *DEDatabase) AddUserDataUsageBatch(context context.Context, start, end s
 		Where("us.username BETWEEN ? AND ?", start, end).
 		Where("time = (SELECT MAX(time) FROM user_data_usage u2 WHERE u2.user_id = udu.user_id)").
 		ToSql()
+
+	if err != nil {
+		return nil, errors.Wrap(err, "Error formatting SQL query")
+	}
+
 	startargs = append(startargs, nuargs...)
 	new_usages := "new_usages (username, usage) AS (SELECT username, usage from new_nonzero_usages UNION ALL " + new_usages2 + ")"
 
