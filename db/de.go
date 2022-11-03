@@ -113,7 +113,7 @@ func (d *DEDatabase) AddUserDataUsageBatch(context context.Context, start, end s
 		Column("?", 0).
 		From(d.Table("user_data_usage", "udu")).
 		Join(fmt.Sprintf("%s ON (us.id = udu.user_id)", d.Table("users", "us"))).
-		LeftJoin("new_nonzero_usages ON users.username = new_nonzero_usages.username").
+		LeftJoin("new_nonzero_usages ON us.username = new_nonzero_usages.username").
 		Where(squirrel.Gt{"total": 0}).
 		Where("us.username BETWEEN ? AND ?", start, end).
 		Where("time = (SELECT MAX(time) FROM user_data_usage u2 WHERE u2.user_id = udu.user_id)").
