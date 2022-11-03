@@ -203,7 +203,7 @@ func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start,
 		return nil, errors.Wrap(err, "Error ensuring users exist")
 	}
 
-	res, err := dedb.AddUserDataUsageBatch(ctx, usagesFixed, time.Now())
+	res, err := dedb.AddUserDataUsageBatch(ctx, start, end, usagesFixed, time.Now())
 	if err != nil {
 		return nil, errors.Wrap(err, "Error inserting new usage")
 	}
