@@ -108,7 +108,7 @@ func (d *DEDatabase) AddUserDataUsageBatch(context context.Context, start, end s
 	nonzero_usages := "new_nonzero_usages (username, usage) AS (VALUES " + strings.Join(placeholders, ",") + ")"
 
 	// Add a 0 for any user whose most recent total is > 0 but who doesn't appear in the batch we got from the ICAT
-	new_usages2, nuargs, err := psql.Select().
+	new_usages2, nuargs, err := squirrel.Select().
 		Column("us.username").
 		Column("?", 0).
 		From(d.Table("user_data_usage", "udu")).
@@ -117,6 +117,7 @@ func (d *DEDatabase) AddUserDataUsageBatch(context context.Context, start, end s
 		Where(squirrel.Gt{"total": 0}).
 		Where("us.username BETWEEN ? AND ?", start, end).
 		Where("time = (SELECT MAX(time) FROM user_data_usage u2 WHERE u2.user_id = udu.user_id)").
+		Where("new_nonzero_usages.usage IS NULL").
 		ToSql()
 
 	if err != nil {
