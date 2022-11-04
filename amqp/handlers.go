@@ -136,7 +136,10 @@ func UpdateUserBatchHandler(ctx context.Context, del amqp.Delivery, dedb, icat *
 		return e
 	}
 
+	log.Trace("Finished updating batch in DE Database")
+
 	for _, r := range res {
+		log.Tracef("Sending update for %+v", r)
 		err = nc.SendUserUsageUpdateMessage(ctx, r)
 		if err != nil {
 			return err

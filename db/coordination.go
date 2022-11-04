@@ -198,9 +198,13 @@ func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start,
 	}
 	defer b.DERollback()
 
-	err = dedb.EnsureUsers(ctx, us)
-	if err != nil {
-		return nil, errors.Wrap(err, "Error ensuring users exist")
+	if len(us) > 0 {
+		err = dedb.EnsureUsers(ctx, us)
+		if err != nil {
+			return nil, errors.Wrap(err, "Error ensuring users exist")
+		}
+	} else {
+		log.Tracef("No users to be ensured in the batch")
 	}
 
 	res, err := dedb.AddUserDataUsageBatch(ctx, start, end, usagesFixed, time.Now())

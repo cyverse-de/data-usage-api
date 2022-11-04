@@ -101,33 +101,47 @@ func (d *DEDatabase) AddUserDataUsageBatch(context context.Context, start, end s
 
 	var placeholders []string
 	var startargs []interface{}
-	for usr, usg := range usages {
-		placeholders = append(placeholders, "(?::text, ?::bigint)")
-		startargs = append(startargs, usr, usg)
+	var startcte, nonzero_usages, new_usages string
+
+	if len(usages) > 0 {
+		for usr, usg := range usages {
+			placeholders = append(placeholders, "(?::text, ?::bigint)")
+			startargs = append(startargs, usr, usg)
+		}
+		nonzero_usages = "new_nonzero_usages (username, usage) AS (VALUES " + strings.Join(placeholders, ",") + ")"
 	}
-	nonzero_usages := "new_nonzero_usages (username, usage) AS (VALUES " + strings.Join(placeholders, ",") + ")"
 
 	// Add a 0 for any user whose most recent total is > 0 but who doesn't appear in the batch we got from the ICAT
-	new_usages2, nuargs, err := squirrel.Select().
-		Column("us.username").
-		Column("?", 0).
+	nu := squirrel.Select().
+		Column("us.username::text AS username").
+		Column("?::bigint AS usage", 0).
 		From(d.Table("user_data_usage", "udu")).
 		Join(fmt.Sprintf("%s ON (us.id = udu.user_id)", d.Table("users", "us"))).
-		LeftJoin("new_nonzero_usages ON us.username = new_nonzero_usages.username").
 		Where(squirrel.Gt{"total": 0}).
 		Where("us.username BETWEEN ? AND ?", start, end).
 		Where("time = (SELECT MAX(time) FROM user_data_usage u2 WHERE u2.user_id = udu.user_id)").
-		Where("new_nonzero_usages.usage IS NULL").
-		ToSql()
+		Limit(uint64(d.configuration.BatchSize))
+
+	if len(usages) > 0 {
+		nu = nu.LeftJoin("new_nonzero_usages ON us.username = new_nonzero_usages.username").
+			Where("new_nonzero_usages.usage IS NULL")
+	}
+
+	new_usages2, nuargs, err := nu.ToSql()
 
 	if err != nil {
 		return nil, errors.Wrap(err, "Error formatting SQL query")
 	}
 
 	startargs = append(startargs, nuargs...)
-	new_usages := "new_usages (username, usage) AS (SELECT username, usage from new_nonzero_usages UNION ALL " + new_usages2 + ")"
 
-	startcte := "WITH " + nonzero_usages + ", " + new_usages
+	if len(usages) > 0 {
+		new_usages = "new_usages (username, usage) AS (SELECT username, usage from new_nonzero_usages UNION ALL " + new_usages2 + ")"
+		startcte = "WITH " + nonzero_usages + ", " + new_usages
+	} else {
+		new_usages = "new_usages (username, usage) AS (" + new_usages2 + ")"
+		startcte = "WITH " + new_usages
+	}
 
 	querys, args, err := psql.Insert(d.Table("user_data_usage", "d")).
 		Prefix(startcte, startargs...).
