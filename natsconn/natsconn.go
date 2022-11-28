@@ -2,6 +2,7 @@ package natsconn
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/cyverse-de/go-mod/gotelnats"
 	"github.com/cyverse-de/go-mod/pbinit"
 	"github.com/cyverse-de/go-mod/protobufjson"
+	"github.com/cyverse-de/go-mod/subjects"
 	"github.com/cyverse-de/p/go/qms"
 	"github.com/labstack/gommon/log"
 	"github.com/nats-io/nats.go"
@@ -105,6 +107,43 @@ func (nc *Connector) SendUserUsageUpdateMessage(ctx context.Context, res *db.Use
 	return gotelnats.Publish(ctx, nc.Conn, "cyverse.qms.user.usages.add",
 		pbinit.NewAddUsage(res.Username, "data.size", "SET", float64(res.Total)),
 	)
+}
+
+func (nc *Connector) UserCurrentDataUsage(ctx context.Context, config *config.Config, username string) (*UserDataUsage, error) {
+	var err error
+
+	req := &qms.GetUsages{
+		Username: util.FixUsername(username, config),
+	}
+
+	_, span := pbinit.InitGetUsages(req, subjects.QMSGetUserUsages)
+	defer span.End()
+
+	resp := pbinit.NewUsageList()
+
+	if err = gotelnats.Request(ctx, nc.Conn, subjects.QMSGetUserUsages, req, resp); err != nil {
+		return nil, err
+	}
+
+	var usage *qms.Usage
+	for _, u := range resp.Usages {
+		if u.ResourceType.Name == "data.size" {
+			usage = u
+		}
+	}
+
+	if usage == nil {
+		return nil, sql.ErrNoRows
+	}
+
+	retval := &UserDataUsage{
+		ID:           usage.Uuid,
+		Total:        int64(usage.Usage),
+		Time:         usage.CreatedAt.AsTime(),
+		LastModified: usage.LastModifiedAt.AsTime(),
+	}
+
+	return retval, nil
 }
 
 func (nc *Connector) AllResourceOveragesForUser(ctx context.Context, config *config.Config, username string) (*qms.OverageList, error) {
