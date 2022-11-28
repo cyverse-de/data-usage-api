@@ -19,7 +19,7 @@ func (a *App) UpdateUserCurrentUsageHandler(c echo.Context) error {
 	}
 	user = util.FixUsername(user, a.configuration)
 
-	dbs := db.NewBoth(a.dedb, a.icat, a.configuration)
+	dbs := db.NewBoth(a.dedb, a.icat, a.configuration, a.nc)
 
 	res, err := dbs.UpdateUserDataUsage(context, user)
 	if err != nil {
@@ -28,7 +28,7 @@ func (a *App) UpdateUserCurrentUsageHandler(c echo.Context) error {
 		return logging.ErrorResponse{Message: e.Error(), ErrorCode: "500", HTTPStatusCode: http.StatusInternalServerError}
 	}
 
-	err = a.nc.SendUserUsageUpdateMessage(context, res)
+	err = a.nc.SendUserUsageUpdateMessage(context, res.Username, float64(res.Total))
 	if err != nil {
 		log.Error(err)
 	}

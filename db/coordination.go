@@ -3,9 +3,9 @@ package db
 import (
 	"context"
 	"database/sql"
-	"time"
 
 	"github.com/cyverse-de/data-usage-api/config"
+	"github.com/cyverse-de/data-usage-api/natsconn"
 	"github.com/cyverse-de/data-usage-api/util"
 	"github.com/pkg/errors"
 
@@ -16,6 +16,7 @@ type BothDatabases struct {
 	deconn        DatabaseTxAccessor
 	icatconn      DatabaseTxAccessor
 	configuration *config.Config
+	nc            *natsconn.Connector
 
 	DERollback func()
 	DECommit   func() error
@@ -27,8 +28,8 @@ type BothDatabases struct {
 	icattx *ICATDatabase
 }
 
-func NewBoth(dedb DatabaseTxAccessor, icatdb DatabaseTxAccessor, config *config.Config) *BothDatabases {
-	return &BothDatabases{deconn: dedb, icatconn: icatdb, configuration: config}
+func NewBoth(dedb DatabaseTxAccessor, icatdb DatabaseTxAccessor, config *config.Config, nc *natsconn.Connector) *BothDatabases {
+	return &BothDatabases{deconn: dedb, icatconn: icatdb, configuration: config, nc: nc}
 }
 
 func (b *BothDatabases) DETx(ctx context.Context) (*DEDatabase, error) {
@@ -117,7 +118,7 @@ func (b *BothDatabases) ICATTx(ctx context.Context) (*ICATDatabase, error) {
 	return b.icattx, nil
 }
 
-func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username string) (*UserDataUsage, error) {
+func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username string) (*natsconn.UserDataUsage, error) {
 	ctx, span := otel.Tracer(otelName).Start(context, "UpdateUserDataUsage")
 	defer span.End()
 
@@ -139,13 +140,7 @@ func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username st
 	// if this update shouldn't be added, or should amend a prior reading, do it here or in the method called below
 	// or maybe have an async cleanup process that deduplicates readings
 
-	dedb, err := b.DETx(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "Error creating DE database transaction")
-	}
-	defer b.DERollback()
-
-	res, err := dedb.AddUserDataUsage(ctx, username, usagenum, time.Now())
+	res, err := b.nc.UpdateUsageForUser(ctx, b.configuration, username, float64(usagenum))
 	if err == sql.ErrNoRows {
 		e := errors.Wrap(err, "No data could be inserted. Perhaps the user doesn't exist in the DE database")
 		log.Error(e)
@@ -156,17 +151,10 @@ func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username st
 		return nil, e
 	}
 
-	err = b.DECommit()
-	if err != nil {
-		e := errors.Wrap(err, "Error committing DE transaction")
-		log.Error(e)
-		return nil, e
-	}
-
 	return res, err
 }
 
-func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start, end string) ([]*UserDataUsage, error) {
+func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start, end string) ([]*natsconn.UserDataUsage, error) {
 	ctx, span := otel.Tracer(otelName).Start(context, "UpdateUserDataUsageBatch")
 	defer span.End()
 
@@ -186,10 +174,10 @@ func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start,
 	log.Tracef("usages in batch: %+v", usages)
 
 	var us []string
-	usagesFixed := make(map[string]int64)
+	usagesFixed := make(map[string]float64)
 	for usr, usg := range usages { // keys of usages map
 		us = append(us, util.FixUsername(usr, b.configuration))
-		usagesFixed[util.FixUsername(usr, b.configuration)] = usg
+		usagesFixed[util.FixUsername(usr, b.configuration)] = float64(usg)
 	}
 
 	dedb, err := b.DETx(ctx)
@@ -207,7 +195,7 @@ func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start,
 		log.Tracef("No users to be ensured in the batch")
 	}
 
-	res, err := dedb.AddUserDataUsageBatch(ctx, start, end, usagesFixed, time.Now())
+	res, err := b.nc.AddUserUpdatesBatch(ctx, b.configuration, usagesFixed)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error inserting new usage")
 	}

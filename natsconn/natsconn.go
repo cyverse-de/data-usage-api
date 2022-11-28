@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/cyverse-de/data-usage-api/config"
-	"github.com/cyverse-de/data-usage-api/db"
 	"github.com/cyverse-de/data-usage-api/util"
 	"github.com/cyverse-de/go-mod/gotelnats"
 	"github.com/cyverse-de/go-mod/pbinit"
@@ -17,6 +16,7 @@ import (
 	"github.com/cyverse-de/p/go/qms"
 	"github.com/labstack/gommon/log"
 	"github.com/nats-io/nats.go"
+	"github.com/samber/lo"
 )
 
 type Connector struct {
@@ -103,9 +103,9 @@ func NewConnector(cs *ConnectorSettings) (*Connector, error) {
 	return connector, nil
 }
 
-func (nc *Connector) SendUserUsageUpdateMessage(ctx context.Context, res *db.UserDataUsage) error {
+func (nc *Connector) SendUserUsageUpdateMessage(ctx context.Context, username string, total float64) error {
 	return gotelnats.Publish(ctx, nc.Conn, "cyverse.qms.user.usages.add",
-		pbinit.NewAddUsage(res.Username, "data.size", "SET", float64(res.Total)),
+		pbinit.NewAddUsage(username, "data.size", "SET", total),
 	)
 }
 
@@ -171,4 +171,60 @@ func (nc *Connector) AllResourceOveragesForUser(ctx context.Context, config *con
 	}
 
 	return resp, nil
+}
+
+func (nc *Connector) UpdateUsageForUser(ctx context.Context, config *config.Config, username string, usageValue float64) (*UserDataUsage, error) {
+	var err error
+
+	user := util.FixUsername(username, config)
+
+	req := &qms.AddUsage{
+		Username:     user,
+		ResourceName: "data.size",
+		UpdateType:   "SET",
+		UsageValue:   usageValue,
+		ResourceUnit: "bytes",
+	}
+
+	_, span := pbinit.InitAddUsage(req, subjects.QMSAddUserUsages)
+	defer span.End()
+
+	resp := pbinit.NewUsageList()
+
+	if err = gotelnats.Request(ctx, nc.Conn, subjects.QMSAddUserUsages, req, resp); err != nil {
+		return nil, err
+	}
+
+	var usage *qms.Usage
+	for _, u := range resp.Usages {
+		if u.ResourceType.Name == "data.size" {
+			usage = u
+		}
+	}
+
+	if usage == nil {
+		return nil, sql.ErrNoRows
+	}
+
+	retval := &UserDataUsage{
+		ID:           usage.Uuid,
+		Total:        int64(usage.Usage),
+		Time:         usage.CreatedAt.AsTime(),
+		LastModified: usage.LastModifiedAt.AsTime(),
+	}
+
+	return retval, nil
+}
+
+func (nc *Connector) AddUserUpdatesBatch(ctx context.Context, config *config.Config, usages map[string]float64) ([]*UserDataUsage, error) {
+	keys := lo.Keys(usages)
+	retval := make([]*UserDataUsage, 0)
+	for _, k := range keys {
+		u, err := nc.UpdateUsageForUser(ctx, config, k, usages[k])
+		if err != nil {
+			return nil, err
+		}
+		retval = append(retval, u)
+	}
+	return retval, nil
 }
