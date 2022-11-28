@@ -233,7 +233,6 @@ func (d *DEDatabase) GetUserInfo(context context.Context, username string) (*Use
 		return nil, errors.Wrap(err, "error getting user info")
 	}
 
-	var retval UserInfo
-	retval = uis[0]
+	retval := uis[0]
 	return &retval, nil
 }
