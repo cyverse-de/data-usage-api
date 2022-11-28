@@ -91,8 +91,6 @@ github.com/cyverse-de/go-mod/gotelnats v0.0.11 h1:jpnnGrCUnBq1oUow6vujXaW3oiqusV
 github.com/cyverse-de/go-mod/gotelnats v0.0.11/go.mod h1:UDIqvtSCeOKvjV+gZ+DrcPoTHPYkQjIuFxw7IlcbAI0=
 github.com/cyverse-de/go-mod/otelutils v0.0.2 h1:7O3jWQgf+PIIACSwtQM5SNtn6xTxxaLIUW6kjEKUpHM=
 github.com/cyverse-de/go-mod/otelutils v0.0.2/go.mod h1:8P2jRGnvUsH4qtyVP0W6KiV5iSr102pLkzKFgkYJ4og=
-github.com/cyverse-de/go-mod/pbinit v0.0.3 h1:dITpXZC7Tm+u8QkrSHmvMsOS/Mzb7n512FZbQfyTdWM=
-github.com/cyverse-de/go-mod/pbinit v0.0.3/go.mod h1:PkyTWEVPkvcsygNmSLt5kp2PADdVvwvVo/yn4MZXEtI=
 github.com/cyverse-de/go-mod/pbinit v0.0.11 h1:y/SkGwYJBkLBfNrjNilqyLsgpJiu9mvI4Pie6+5Ocag=
 github.com/cyverse-de/go-mod/pbinit v0.0.11/go.mod h1:LQum+1DVzEtQhOila6gZEB6AcUePLalvvqWTpdXt+lA=
 github.com/cyverse-de/go-mod/protobufjson v0.0.3 h1:XTIZejY7EUbpF6ZdhRhiFX9PGYDkGGmPP760cDswGWM=
