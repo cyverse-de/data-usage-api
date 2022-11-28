@@ -218,15 +218,22 @@ func (d *DEDatabase) GetUserInfo(context context.Context, username string) (*Use
 	ctx, span := otel.Tracer(otelName).Start(context, "GetUserInfo")
 	defer span.End()
 
-	query, args, err := psql.Select("u.id", "u.username").From(d.Table("users", "u")).Where("u.username = ?", username).ToSql()
+	query, args, err := psql.
+		Select("id", "username").
+		From(d.Table("users", "u")).
+		Where("username = ?", username).
+		ToSql()
 	if err != nil {
 		return nil, err
 	}
 
-	var retval UserInfo
-	if err = d.db.GetContext(ctx, &retval, query, args); err != nil {
+	var uis []UserInfo
+	err = d.db.SelectContext(ctx, &uis, query, args...)
+	if err != nil {
 		return nil, errors.Wrap(err, "error getting user info")
 	}
 
+	var retval UserInfo
+	retval = uis[0]
 	return &retval, nil
 }

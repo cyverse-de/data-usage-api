@@ -122,11 +122,22 @@ func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username st
 	ctx, span := otel.Tracer(otelName).Start(context, "UpdateUserDataUsage")
 	defer span.End()
 
+	dedb, err := b.DETx(ctx)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error creating DE transaction")
+	}
+	defer b.DERollback()
+
 	icatdb, err := b.ICATTx(ctx)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error creating ICAT transaction")
 	}
 	defer b.ICATRollback()
+
+	userInfo, err := dedb.GetUserInfo(ctx, username)
+	if err != nil {
+		return nil, errors.Wrap(err, "error getting user info")
+	}
 
 	usagenum, err := icatdb.UserCurrentDataUsage(ctx, username)
 	if err == sql.ErrNoRows {
@@ -137,6 +148,7 @@ func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username st
 	}
 	b.ICATRollback()
 
+	log.Debugf("username %s; usage value %d", username, usagenum)
 	// if this update shouldn't be added, or should amend a prior reading, do it here or in the method called below
 	// or maybe have an async cleanup process that deduplicates readings
 
@@ -150,6 +162,9 @@ func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username st
 		log.Error(e)
 		return nil, e
 	}
+
+	res.UserID = userInfo.ID
+	res.Username = userInfo.Username
 
 	return res, err
 }

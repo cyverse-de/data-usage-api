@@ -17,6 +17,7 @@ import (
 	"github.com/labstack/gommon/log"
 	"github.com/nats-io/nats.go"
 	"github.com/samber/lo"
+	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Connector struct {
@@ -178,39 +179,39 @@ func (nc *Connector) UpdateUsageForUser(ctx context.Context, config *config.Conf
 
 	user := util.FixUsername(username, config)
 
-	req := &qms.AddUsage{
-		Username:     user,
-		ResourceName: "data.size",
-		UpdateType:   "SET",
-		UsageValue:   usageValue,
-		ResourceUnit: "bytes",
+	up := &qms.Update{
+		Value:         usageValue,
+		EffectiveDate: timestamppb.Now(),
+		Operation: &qms.UpdateOperation{
+			Name: "SET",
+		},
+		ResourceType: &qms.ResourceType{
+			Name: "data.size",
+			Unit: "bytes",
+		},
+		User: &qms.QMSUser{
+			Username: user,
+		},
+		ValueType: "usages",
 	}
 
-	_, span := pbinit.InitAddUsage(req, subjects.QMSAddUserUsages)
+	req := pbinit.NewAddUpdateRequest(up)
+	_, span := pbinit.InitQMSAddUpdateRequest(req, subjects.QMSAddUserUpdate)
 	defer span.End()
 
-	resp := pbinit.NewUsageList()
+	resp := pbinit.NewQMSAddUpdateResponse()
 
-	if err = gotelnats.Request(ctx, nc.Conn, subjects.QMSAddUserUsages, req, resp); err != nil {
+	if err = gotelnats.Request(ctx, nc.Conn, subjects.QMSAddUserUpdate, req, resp); err != nil {
 		return nil, err
 	}
 
-	var usage *qms.Usage
-	for _, u := range resp.Usages {
-		if u.ResourceType.Name == "data.size" {
-			usage = u
-		}
-	}
-
-	if usage == nil {
-		return nil, sql.ErrNoRows
-	}
+	usage := resp.Update
 
 	retval := &UserDataUsage{
 		ID:           usage.Uuid,
-		Total:        int64(usage.Usage),
-		Time:         usage.CreatedAt.AsTime(),
-		LastModified: usage.LastModifiedAt.AsTime(),
+		Total:        int64(usage.Value),
+		Time:         usage.EffectiveDate.AsTime(),
+		LastModified: usage.EffectiveDate.AsTime(),
 	}
 
 	return retval, nil
