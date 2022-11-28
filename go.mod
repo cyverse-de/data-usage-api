@@ -10,8 +10,9 @@ require (
 	github.com/cyverse-de/go-mod/otelutils v0.0.2
 	github.com/cyverse-de/go-mod/pbinit v0.0.3
 	github.com/cyverse-de/go-mod/protobufjson v0.0.3
+	github.com/cyverse-de/go-mod/subjects v0.0.3
 	github.com/cyverse-de/messaging/v9 v9.1.4
-	github.com/cyverse-de/p/go/qms v0.0.6
+	github.com/cyverse-de/p/go/qms v0.0.12
 	github.com/jmoiron/sqlx v1.3.4
 	github.com/labstack/echo/v4 v4.7.0
 	github.com/labstack/gommon v0.3.1
@@ -71,7 +72,7 @@ require (
 	golang.org/x/sys v0.0.0-20220403205710-6acee93ad0eb // indirect
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20220411224347-583f2d630306 // indirect
-	google.golang.org/protobuf v1.28.0 // indirect
+	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/ini.v1 v1.66.4 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
