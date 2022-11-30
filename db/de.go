@@ -22,6 +22,11 @@ type UserDataUsage struct {
 	LastModified time.Time `db:"last_modified" json:"last_modified"`
 }
 
+type UserInfo struct {
+	ID       string `db:"id" json:"id"`
+	Username string `db:"username" json:"username"`
+}
+
 type DEDatabase struct {
 	db            DatabaseAccessor
 	configuration *config.Config
@@ -205,4 +210,29 @@ func (d *DEDatabase) EnsureUsers(context context.Context, users []string) error 
 		return errors.Wrap(err, "Error inserting users")
 	}
 	return nil
+}
+
+func (d *DEDatabase) GetUserInfo(context context.Context, username string) (*UserInfo, error) {
+	log.Tracef("looking up user info for %s", username)
+
+	ctx, span := otel.Tracer(otelName).Start(context, "GetUserInfo")
+	defer span.End()
+
+	query, args, err := psql.
+		Select("id", "username").
+		From(d.Table("users", "u")).
+		Where("username = ?", username).
+		ToSql()
+	if err != nil {
+		return nil, err
+	}
+
+	var uis []UserInfo
+	err = d.db.SelectContext(ctx, &uis, query, args...)
+	if err != nil {
+		return nil, errors.Wrap(err, "error getting user info")
+	}
+
+	retval := uis[0]
+	return &retval, nil
 }

@@ -92,7 +92,7 @@ func UpdateUserHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.
 	ctx, span := otel.Tracer(otelName).Start(ctx, "UpdateUserHandler")
 	defer span.End()
 
-	dbs := db.NewBoth(dedb, icat, configuration)
+	dbs := db.NewBoth(dedb, icat, configuration, nc)
 
 	res, err := dbs.UpdateUserDataUsage(ctx, user)
 	if err != nil {
@@ -105,7 +105,7 @@ func UpdateUserHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.
 		return e
 	}
 
-	err = nc.SendUserUsageUpdateMessage(ctx, res)
+	err = nc.SendUserUsageUpdateMessage(ctx, res.Username, float64(res.Total))
 	if err != nil {
 		return err
 	}
@@ -123,9 +123,9 @@ func UpdateUserBatchHandler(ctx context.Context, del amqp.Delivery, dedb, icat *
 	ctx, span := otel.Tracer(otelName).Start(ctx, "UpdateUserBatchHandler")
 	defer span.End()
 
-	dbs := db.NewBoth(dedb, icat, configuration)
+	dbs := db.NewBoth(dedb, icat, configuration, nc)
 
-	res, err := dbs.UpdateUserDataUsageBatch(ctx, usernames[0], usernames[1])
+	_, err := dbs.UpdateUserDataUsageBatch(ctx, usernames[0], usernames[1])
 	if err != nil {
 		e := errors.Wrap(err, "Failed updating usage information")
 		log.Error(e)
@@ -134,16 +134,6 @@ func UpdateUserBatchHandler(ctx context.Context, del amqp.Delivery, dedb, icat *
 			log.Error(errors.Wrap(rejectErr, "Failed rejecting failed message"))
 		}
 		return e
-	}
-
-	log.Trace("Finished updating batch in DE Database")
-
-	for _, r := range res {
-		log.Tracef("Sending update for %+v", r)
-		err = nc.SendUserUsageUpdateMessage(ctx, r)
-		if err != nil {
-			return err
-		}
 	}
 
 	return nil

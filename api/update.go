@@ -19,18 +19,13 @@ func (a *App) UpdateUserCurrentUsageHandler(c echo.Context) error {
 	}
 	user = util.FixUsername(user, a.configuration)
 
-	dbs := db.NewBoth(a.dedb, a.icat, a.configuration)
+	dbs := db.NewBoth(a.dedb, a.icat, a.configuration, a.nc)
 
 	res, err := dbs.UpdateUserDataUsage(context, user)
 	if err != nil {
 		e := errors.Wrap(err, "Failed updating usage information")
 		log.Error(e)
 		return logging.ErrorResponse{Message: e.Error(), ErrorCode: "500", HTTPStatusCode: http.StatusInternalServerError}
-	}
-
-	err = a.nc.SendUserUsageUpdateMessage(context, res)
-	if err != nil {
-		log.Error(err)
 	}
 
 	return c.JSON(http.StatusOK, res)

@@ -23,9 +23,16 @@ func (a *App) UserCurrentUsageHandler(c echo.Context) error {
 	}
 	user = util.FixUsername(user, a.configuration)
 
-	dedb := db.NewDE(a.dedb, a.configuration)
+	// Get user info from the DE database. Used below to fill out some fields
+	// in the response.
+	db := db.NewDE(a.dedb, a.configuration)
+	userInfo, err := db.GetUserInfo(context, user)
+	if err != nil {
+		return logging.ErrorResponse{Message: err.Error(), ErrorCode: "400", HTTPStatusCode: http.StatusBadRequest}
+	}
 
-	res, err := dedb.UserCurrentDataUsage(context, user)
+	// Get the current usage as recorded in QMS.
+	res, err := a.nc.UserCurrentDataUsage(context, a.configuration, user)
 
 	if err == sql.ErrNoRows {
 		log.Tracef("Enqueuing update message for %s", user)
@@ -39,6 +46,12 @@ func (a *App) UserCurrentUsageHandler(c echo.Context) error {
 		log.Error(e)
 		return logging.ErrorResponse{Message: e.Error(), ErrorCode: "500", HTTPStatusCode: http.StatusInternalServerError}
 	}
+
+	// QMS response contains user info from QMS, which does not necessarily
+	// match the user info in the DE. Callers are expecting DE user info here,
+	// not QMS user info.
+	res.UserID = userInfo.ID
+	res.Username = userInfo.Username
 
 	// if the user's usage information is older than the refresh interval, asynchronously update it
 	if res.Time.Add(*a.configuration.RefreshInterval).Before(time.Now()) {
