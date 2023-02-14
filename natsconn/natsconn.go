@@ -77,7 +77,11 @@ func NewConnector(cs *ConnectorSettings) (*Connector, error) {
 		nats.MaxReconnects(cs.MaxReconnects),
 		nats.ReconnectWait(time.Duration(cs.ReconnectWait)*time.Second),
 		nats.DisconnectErrHandler(func(nc *nats.Conn, err error) {
-			log.Errorf("disconnected from nats: %s", err.Error())
+			if err != nil {
+				log.Errorf("disconnected from nats: %s", err.Error())
+			} else {
+				log.Errorf("disconnected from nats")
+			}
 		}),
 		nats.ReconnectHandler(func(nc *nats.Conn) {
 			log.Infof("reconnected to %s", nc.ConnectedUrl())
