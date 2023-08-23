@@ -184,12 +184,12 @@ func (i *ICATDatabase) resourcesSubselect() (string, []interface{}, error) {
 
 func (i *ICATDatabase) baseUsageQuery(userCollsTable, resourceQuery string, resourceArgs []interface{}) squirrel.SelectBuilder {
 	return psql.Select().
-		Column("SUM(d.data_size) AS file_volume").
+		Column("COALESCE(SUM(d.data_size),0) AS file_volume").
 		From("r_user_main AS u").
-		Join(fmt.Sprintf("%s AS c ON c.user_name = u.user_name", userCollsTable)).
-		Join("r_data_main AS d ON d.coll_id = c.coll_id").
+		LeftJoin(fmt.Sprintf("%s AS c ON c.user_name = u.user_name", userCollsTable)).
+		LeftJoin("r_data_main AS d ON d.coll_id = c.coll_id").
 		Where(squirrel.Eq{"u.user_type_name": "rodsuser"}).
-		Where(fmt.Sprintf("d.resc_id = ANY(ARRAY(%s))", resourceQuery), resourceArgs...).
+		Where(fmt.Sprintf("(d.resc_id IS NULL OR d.resc_id = ANY(ARRAY(%s)))", resourceQuery), resourceArgs...).
 		GroupBy("u.user_name")
 }
 

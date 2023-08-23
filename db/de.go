@@ -80,105 +80,6 @@ func (d *DEDatabase) UserCurrentDataUsage(context context.Context, username stri
 	return d.doUserUsage(ctx, query)
 }
 
-func (d *DEDatabase) AddUserDataUsage(context context.Context, username string, total int64, time time.Time) (*UserDataUsage, error) {
-	log.Tracef("Inserting for %s: %d at %s", username, total, time)
-	ctx, span := otel.Tracer(otelName).Start(context, "AddUserDataUsage")
-	defer span.End()
-
-	query := psql.Insert(d.Table("user_data_usage", "d")).
-		Columns("total", "time", "user_id").
-		Select(psql.Select().
-			Column("? AS total", total).
-			Column("? AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS time", time).
-			Column("u.id").
-			From(d.Table("users", "u")).
-			Where("username = ?", username),
-		).
-		Suffix("RETURNING d.id, d.total, d.user_id, (SELECT username from users WHERE id = d.user_id) as username, d.time AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS time, d.last_modified AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS last_modified")
-
-	return d.doUserUsage(ctx, query)
-}
-
-func (d *DEDatabase) AddUserDataUsageBatch(context context.Context, start, end string, usages map[string]int64, time time.Time) ([]*UserDataUsage, error) {
-	log.Tracef("Inserting usages: %+v at %s", usages, time)
-	ctx, span := otel.Tracer(otelName).Start(context, "AddUserDataUsageBatch")
-	defer span.End()
-
-	var placeholders []string
-	var startargs []interface{}
-	var startcte, nonzero_usages, new_usages string
-
-	if len(usages) > 0 {
-		for usr, usg := range usages {
-			placeholders = append(placeholders, "(?::text, ?::bigint)")
-			startargs = append(startargs, usr, usg)
-		}
-		nonzero_usages = "new_nonzero_usages (username, usage) AS (VALUES " + strings.Join(placeholders, ",") + ")"
-	}
-
-	// Add a 0 for any user whose most recent total is > 0 but who doesn't appear in the batch we got from the ICAT
-	nu := squirrel.Select().
-		Column("us.username::text AS username").
-		Column("?::bigint AS usage", 0).
-		From(d.Table("user_data_usage", "udu")).
-		Join(fmt.Sprintf("%s ON (us.id = udu.user_id)", d.Table("users", "us"))).
-		Where(squirrel.Gt{"total": 0}).
-		Where("us.username BETWEEN ? AND ?", start, end).
-		Where("time = (SELECT MAX(time) FROM user_data_usage u2 WHERE u2.user_id = udu.user_id)").
-		Limit(uint64(d.configuration.BatchSize))
-
-	if len(usages) > 0 {
-		nu = nu.LeftJoin("new_nonzero_usages ON us.username = new_nonzero_usages.username").
-			Where("new_nonzero_usages.usage IS NULL")
-	}
-
-	new_usages2, nuargs, err := nu.ToSql()
-
-	if err != nil {
-		return nil, errors.Wrap(err, "Error formatting SQL query")
-	}
-
-	startargs = append(startargs, nuargs...)
-
-	if len(usages) > 0 {
-		new_usages = "new_usages (username, usage) AS (SELECT username, usage from new_nonzero_usages UNION ALL " + new_usages2 + ")"
-		startcte = "WITH " + nonzero_usages + ", " + new_usages
-	} else {
-		new_usages = "new_usages (username, usage) AS (" + new_usages2 + ")"
-		startcte = "WITH " + new_usages
-	}
-
-	querys, args, err := psql.Insert(d.Table("user_data_usage", "d")).
-		Prefix(startcte, startargs...).
-		Columns("total", "time", "user_id").
-		Select(squirrel.Select().
-			Column("new_usages.usage AS total").
-			Column("? AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS time", time).
-			Column("u.id").
-			From(d.Table("users", "u")).
-			Join("new_usages ON (new_usages.username = u.username)"),
-		).
-		Suffix("RETURNING d.id, d.total, d.user_id, (SELECT username from users WHERE id = d.user_id) as username, d.time AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS time, d.last_modified AT TIME ZONE (SELECT current_setting('TIMEZONE')) AS last_modified").
-		ToSql()
-
-	if err != nil {
-		return nil, errors.Wrap(err, "Error formatting SQL query")
-	}
-
-	log.Tracef("AddUserDataUsageBatch SQL: %s, %+v", querys, args)
-
-	var rv []*UserDataUsage
-
-	err = d.db.SelectContext(ctx, &rv, querys, args...)
-	if err == sql.ErrNoRows {
-		return nil, err
-	} else if err != nil {
-		return nil, errors.Wrap(err, "Error running query")
-	}
-
-	return rv, nil
-}
-
 func (d *DEDatabase) EnsureUsers(context context.Context, users []string) error {
 	log.Tracef("Ensuring users %+v", users)
 	ctx, span := otel.Tracer(otelName).Start(context, "EnsureUsers")
@@ -231,6 +132,10 @@ func (d *DEDatabase) GetUserInfo(context context.Context, username string) (*Use
 	err = d.db.SelectContext(ctx, &uis, query, args...)
 	if err != nil {
 		return nil, errors.Wrap(err, "error getting user info")
+	}
+
+	if len(uis) < 1 {
+		return nil, errors.New("No rows returned for user")
 	}
 
 	retval := uis[0]
