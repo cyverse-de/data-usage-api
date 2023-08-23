@@ -210,16 +210,16 @@ func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start,
 		log.Tracef("No users to be ensured in the batch")
 	}
 
-	res, err := b.nc.AddUserUpdatesBatch(ctx, b.configuration, usagesFixed)
-	if err != nil {
-		return nil, errors.Wrap(err, "Error inserting new usage")
-	}
-
 	err = b.DECommit()
 	if err != nil {
 		e := errors.Wrap(err, "Error committing DE transaction")
 		log.Error(e)
 		return nil, e
+	}
+
+	res, err := b.nc.AddUserUpdatesBatch(ctx, b.configuration, usagesFixed)
+	if err != nil {
+		return nil, errors.Wrap(err, "Error inserting new usage")
 	}
 
 	return res, nil
