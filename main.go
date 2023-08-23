@@ -66,11 +66,11 @@ amqp:
   batch_size: 100
 `
 
-func getQueueName(prefix string) string {
+func getQueueNames(prefix string) (string, string) {
 	if len(prefix) > 0 {
-		return fmt.Sprintf("%s.%s", prefix, serviceName)
+		return fmt.Sprintf("%s.%s.batch", prefix, serviceName), fmt.Sprintf("%s.%s.individual", prefix, serviceName)
 	}
-	return serviceName
+	return fmt.Sprintf("%s.batch", serviceName), fmt.Sprintf("%s.individual", serviceName)
 }
 
 func main() {
@@ -187,11 +187,17 @@ func main() {
 	icatconn.SetConnMaxIdleTime(time.Minute)
 
 	// configure and start AMQP bits here
-	listenClient, err := messaging.NewClient(configuration.AMQPURI, true)
+	batchListenClient, err := messaging.NewClient(configuration.AMQPURI, true)
 	if err != nil {
-		log.Fatal(errors.Wrap(err, "Unable to create the messaging listen client"))
+		log.Fatal(errors.Wrap(err, "Unable to create the messaging listen client (batch)"))
 	}
-	defer listenClient.Close()
+	defer batchListenClient.Close()
+
+	individualListenClient, err := messaging.NewClient(configuration.AMQPURI, true)
+	if err != nil {
+		log.Fatal(errors.Wrap(err, "Unable to create the messaging listen client (individual)"))
+	}
+	defer individualListenClient.Close()
 
 	publishClient, err := messaging.NewClient(configuration.AMQPURI, true)
 	if err != nil {
@@ -205,38 +211,53 @@ func main() {
 		log.Fatal(errors.Wrap(err, "Unable to set up message publishing"))
 	}
 
-	go listenClient.Listen()
+	go batchListenClient.Listen()
+	go individualListenClient.Listen()
 
-	queueName := getQueueName(configuration.AMQPQueuePrefix)
-	listenClient.AddConsumerMulti(
-		configuration.AMQPExchangeName,
-		configuration.AMQPExchangeType,
-		queueName,
-		[]string{"index.all", "index.usage.data", "index.usage.data.batch.user.#", a.SingleUserPrefix + ".#"},
-		func(ctx context.Context, del amqp.Delivery) {
-			var err error
+	// we can use the same handler function for both batch and individual,
+	// because the separate queues/routing keys ensure the separation
+	amqpHandlerFunc := func(ctx context.Context, del amqp.Delivery) {
+		var err error
 
-			log.Tracef("Got message: %s", del.RoutingKey)
-			if del.RoutingKey == "index.all" || del.RoutingKey == "index.usage.data" {
-				err = a.SendBatchMessages(ctx, del, dbconn, icatconn, publishClient, configuration)
-			} else if strings.HasPrefix(del.RoutingKey, a.BatchUserPrefix) {
-				err = a.UpdateUserBatchHandler(ctx, del, dbconn, icatconn, natsConn, configuration)
-			} else if strings.HasPrefix(del.RoutingKey, a.SingleUserPrefix) {
-				err = a.UpdateUserHandler(ctx, del, dbconn, icatconn, natsConn, configuration)
-			}
-			if err != nil {
-				log.Error(errors.Wrap(err, "Error handling message"))
-				return
-			}
-			err = del.Ack(false)
-			if err != nil {
-				log.Error(errors.Wrap(err, fmt.Sprintf("Error acknowledging message: %s", del.RoutingKey)))
-			}
-		},
-		1)
+		log.Tracef("Got message: %s", del.RoutingKey)
+		if del.RoutingKey == "index.all" || del.RoutingKey == "index.usage.data" {
+			err = a.SendBatchMessages(ctx, del, dbconn, icatconn, publishClient, configuration)
+		} else if strings.HasPrefix(del.RoutingKey, a.BatchUserPrefix) {
+			err = a.UpdateUserBatchHandler(ctx, del, dbconn, icatconn, natsConn, configuration)
+		} else if strings.HasPrefix(del.RoutingKey, a.SingleUserPrefix) {
+			err = a.UpdateUserHandler(ctx, del, dbconn, icatconn, natsConn, configuration)
+		}
+		if err != nil {
+			log.Error(errors.Wrap(err, "Error handling message"))
+			return
+		}
+		err = del.Ack(false)
+		if err != nil {
+			log.Error(errors.Wrap(err, fmt.Sprintf("Error acknowledging message: %s", del.RoutingKey)))
+		}
+	}
+
+	batchQueueName, individualQueueName := getQueueNames(configuration.AMQPQueuePrefix)
+	// batch handler
 	// - listen for index.all (for convenience) and index.usage.data, and fetch all applicable users, batch them, and send out batch messages - start-of-batch usernames can have no dots so routing keys work
 	// - listen for index.usage.data.batch.user.<start>.<end>, and update the usage information for users from <start> to <end>, inclusive
+	batchListenClient.AddConsumerMulti(
+		configuration.AMQPExchangeName,
+		configuration.AMQPExchangeType,
+		batchQueueName,
+		[]string{"index.all", "index.usage.data", a.BatchUserPrefix + ".#"},
+		amqpHandlerFunc,
+		1)
+
+	// individual user handler
 	// - listen for index.usage.data.user.<username>, and update the usage information for just that user
+	individualListenClient.AddConsumerMulti(
+		configuration.AMQPExchangeName,
+		configuration.AMQPExchangeType,
+		individualQueueName,
+		[]string{a.SingleUserPrefix + ".#"},
+		amqpHandlerFunc,
+		1)
 
 	app = api.New(dbconn, icatconn, publishClient, natsConn, configuration)
 
