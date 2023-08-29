@@ -224,12 +224,18 @@ func (nc *Connector) UpdateUsageForUser(ctx context.Context, config *config.Conf
 func (nc *Connector) AddUserUpdatesBatch(ctx context.Context, config *config.Config, usages map[string]float64) ([]*UserDataUsage, error) {
 	keys := lo.Keys(usages)
 	retval := make([]*UserDataUsage, 0)
+	errs := make([]error, 0)
 	for _, k := range keys {
 		u, err := nc.UpdateUsageForUser(ctx, config, k, usages[k])
 		if err != nil {
-			return nil, err
+			errs = append(errs, err)
 		}
 		retval = append(retval, u)
+	}
+	// If we got errors, throw the first one. It's a little ugly but is the
+	// error that'd get thrown if we were doing it in the loop anyway.
+	if len(errs) > 0 {
+		return retval, errs[0]
 	}
 	return retval, nil
 }
