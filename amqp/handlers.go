@@ -148,7 +148,6 @@ func SendBatchMessages(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.
 
 	i := db.NewICAT(icat, configuration)
 
-	rand.Seed(time.Now().UnixNano())
 	// Randomly add a number between -2 and 2
 	// i.e. in [0,5) minus 2
 	// This makes the bounds different each run, which will help us catch 0
