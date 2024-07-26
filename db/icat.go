@@ -8,7 +8,6 @@ import (
 
 	"github.com/Masterminds/squirrel"
 	"github.com/cyverse-de/data-usage-api/config"
-	"github.com/cyverse-de/data-usage-api/util"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 )
@@ -20,10 +19,6 @@ type ICATDatabase struct {
 
 func NewICAT(db DatabaseAccessor, config *config.Config) *ICATDatabase {
 	return &ICATDatabase{db: db, configuration: config}
-}
-
-func (i *ICATDatabase) FixUsername(username string) string {
-	return util.FixUsername(username, &config.Config{UserSuffix: i.configuration.UserSuffix})
 }
 
 func (i *ICATDatabase) UnqualifiedUsername(username string) string {
