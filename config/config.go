@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/spf13/viper"
@@ -36,7 +37,7 @@ func NewFromViper(cfg *viper.Viper) (*Config, error) {
 		ICATURI:           cfg.GetString("icat.uri"),
 		Zone:              cfg.GetString("icat.zone"),
 		RootResourceNames: cfg.GetStringSlice("icat.rootResources"),
-		UserSuffix:        cfg.GetString("users.domain"),
+		UserSuffix:        strings.Trim(cfg.GetString("users.domain"), "@"),
 		RefreshInterval:   &ri,
 		AMQPURI:           cfg.GetString("amqp.uri"),
 		AMQPExchangeName:  cfg.GetString("amqp.exchange.name"),
