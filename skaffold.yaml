@@ -1,14 +1,14 @@
-apiVersion: skaffold/v1
+apiVersion: skaffold/v4beta11
 kind: Config
 metadata:
   name: data-usage-api
-deploy:
-  kubectl:
-    manifests:
-    - k8s/data-usage-api.yml
 build:
-  tagPolicy:
-    gitCommit: {}
   artifacts:
-  - image: harbor.cyverse.org/de/data-usage-api
-  local: {}
+    - image: harbor.cyverse.org/de/data-usage-api
+      platforms:
+        - "linux/amd64"
+      docker:
+        dockerfile: Dockerfile
+manifests:
+  rawYaml:
+    - k8s/data-usage-api.yml
