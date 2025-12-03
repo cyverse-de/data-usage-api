@@ -1,4 +1,4 @@
-FROM golang:1.21
+FROM golang:1.24
 
 WORKDIR /go/src/github.com/cyverse-de/data-usage-api
 
