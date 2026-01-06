@@ -271,7 +271,7 @@ func (i *ICATDatabase) BatchCurrentDataUsage(context context.Context, start, end
 	if err != nil {
 		return rv, errors.Wrap(err, "Error fetching usage for users")
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	for rows.Next() {
 		var uname string
 		var total int64
@@ -306,7 +306,7 @@ func (i *ICATDatabase) GetUserBatchBounds(context context.Context, batchSize int
 	if err != nil {
 		return bounds, errors.Wrap(err, "Error fetching user batch bounds")
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 
 	boundsMap := make(map[int]string)
 	maxN := 0
