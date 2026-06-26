@@ -2,25 +2,13 @@ package db
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"strings"
-	"time"
 
-	"github.com/Masterminds/squirrel"
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/pkg/errors"
 	"go.opentelemetry.io/otel"
 )
-
-type UserDataUsage struct {
-	ID           string    `db:"id" json:"id"`
-	UserID       string    `db:"user_id" json:"user_id"`
-	Username     string    `db:"username" json:"username"`
-	Total        int64     `db:"total" json:"total"`
-	Time         time.Time `db:"time" json:"time"`
-	LastModified time.Time `db:"last_modified" json:"last_modified"`
-}
 
 type UserInfo struct {
 	ID       string `db:"id" json:"id"`
@@ -38,46 +26,6 @@ func NewDE(db DatabaseAccessor, config *config.Config) *DEDatabase {
 
 func (d *DEDatabase) Table(name, alias string) string {
 	return fmt.Sprintf("%s.%s AS %s", d.configuration.DBSchema, name, alias)
-}
-
-func (d *DEDatabase) baseUserUsageSelect() squirrel.SelectBuilder {
-	return psql.Select("d.id", "d.total", "d.user_id", "u.username", "d.time AT TIME ZONE (select current_setting('TIMEZONE')) AS time", "d.last_modified AT TIME ZONE (select current_setting('TIMEZONE')) AS last_modified").
-		From(d.Table("user_data_usage", "d")).
-		Join(fmt.Sprintf("%s ON (d.user_id = u.id)", d.Table("users", "u")))
-}
-
-func (d *DEDatabase) doUserUsage(context context.Context, query squirrel.Sqlizer) (*UserDataUsage, error) {
-	var usage UserDataUsage
-
-	querys, args, err := query.ToSql()
-
-	if err != nil {
-		return nil, errors.Wrap(err, "Error formatting SQL query")
-	}
-
-	log.Tracef("doUserUsage SQL: %s, %+v", querys, args)
-
-	err = d.db.GetContext(context, &usage, querys, args...)
-	if err == sql.ErrNoRows {
-		return nil, err
-	} else if err != nil {
-		return nil, errors.Wrap(err, "Error running query")
-	}
-
-	return &usage, err
-}
-
-func (d *DEDatabase) UserCurrentDataUsage(context context.Context, username string) (*UserDataUsage, error) {
-	log.Tracef("Getting data usage for %s", username)
-	ctx, span := otel.Tracer(otelName).Start(context, "UserCurrentDataUsage")
-	defer span.End()
-
-	query := d.baseUserUsageSelect().
-		Where("u.username = ?", username).
-		OrderBy("d.time DESC").
-		Limit(1)
-
-	return d.doUserUsage(ctx, query)
 }
 
 func (d *DEDatabase) EnsureUsers(context context.Context, users []string) error {

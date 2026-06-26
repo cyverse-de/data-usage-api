@@ -64,34 +64,6 @@ func (e ErrorResponse) Error() string {
 	return string(e.ErrorBytes())
 }
 
-// DetailedError responds to an HTTP request with a JSON response body indicating that an error
-// occurred and providing some extra details about the error if additional details are available.
-func DetailedError(writer http.ResponseWriter, cause error, code int) {
-	writer.Header().Set("Content-Type", "application/json")
-
-	// Handle both instances of ErrorResponse and generic errors.
-	var errorResponse ErrorResponse
-	switch val := cause.(type) {
-	case ErrorResponse:
-		errorResponse = val
-	case error:
-		errorResponse = ErrorResponse{Message: val.Error()}
-	}
-
-	// Return the response.
-	writer.WriteHeader(code)
-	_, err := writer.Write(errorResponse.ErrorBytes())
-	if err != nil {
-		Log.Errorf("unable to write response body for error: %+v", cause)
-		return
-	}
-}
-
-// Error responds to an HTTP request with a JSON response body indicating that an error occurred.
-func Error(writer http.ResponseWriter, message string, code int) {
-	DetailedError(writer, ErrorResponse{Message: message}, code)
-}
-
 // NewErrorResponse constructs an ErrorResponse based on the message passed in, but does not send
 // it over the wire. This is to aid in converting to labstack/echo.
 func NewErrorResponse(err error) ErrorResponse {

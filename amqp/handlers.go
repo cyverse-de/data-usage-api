@@ -2,10 +2,8 @@ package amqp
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math/rand"
-	"strconv"
 	"strings"
 	"time"
 
@@ -27,58 +25,6 @@ var log = logging.Log.WithFields(logrus.Fields{"package": "amqp"})
 
 const SingleUserPrefix = "index.usage.data.user"
 const BatchUserPrefix = "index.usage.data.batch.user"
-
-type UsageUpdate struct {
-	Attribute string `json:"attribute"`
-	Value     string `json:"value"`
-	Unit      string `json:"unit"`
-	Username  string `json:"username"`
-	UserID    string `json:"user_id"`
-}
-
-type Updater struct {
-	amqpClient *messaging.Client
-}
-
-func NewUpdater(c *messaging.Client) *Updater {
-	return &Updater{
-		amqpClient: c,
-	}
-}
-
-type UsageUpdateMessenger interface {
-	SendUserUsageUpdateMessage(context.Context, *db.UserDataUsage) error
-}
-
-func (u *Updater) SendUserUsageUpdateMessage(ctx context.Context, res *db.UserDataUsage) error {
-	ctx, span := otel.Tracer(otelName).Start(ctx, "SendUserUsageUpdateMessage")
-	defer span.End()
-
-	log.Tracef("Sending user usage update message for %v", res)
-	update := &UsageUpdate{
-		Attribute: "data.size",
-		Value:     strconv.FormatInt(res.Total, 10),
-		Unit:      "bytes",
-		Username:  res.Username,
-		UserID:    res.UserID,
-	}
-	marshalled, err := json.Marshal(update)
-	if err != nil {
-		e := errors.Wrap(err, "Failed marshalling JSON AMQP message")
-		log.Error(e)
-		return e
-	}
-
-	err = u.amqpClient.PublishContext(ctx, "qms.usages", marshalled)
-	if err != nil {
-		e := errors.Wrap(err, "Failed sending usage update AMQP message")
-		log.Error(e)
-		return e
-	}
-	log.Trace("Done sending user usage update message")
-
-	return nil
-}
 
 func UpdateUserHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.DB, nc *natsconn.Connector, configuration *config.Config) error {
 	username := del.RoutingKey[len(SingleUserPrefix)+1:]
