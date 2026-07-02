@@ -6,13 +6,13 @@ require (
 	github.com/Masterminds/squirrel v1.5.4
 	github.com/cyverse-de/configurate v0.0.0-20220113221928-13d34aae3f0f
 	github.com/cyverse-de/go-mod/cfg v0.0.1
-	github.com/cyverse-de/go-mod/gotelnats v0.0.11
-	github.com/cyverse-de/go-mod/otelutils v0.0.3
-	github.com/cyverse-de/go-mod/pbinit v0.1.11
-	github.com/cyverse-de/go-mod/protobufjson v0.0.3
+	github.com/cyverse-de/go-mod/gotelnats v0.1.0
+	github.com/cyverse-de/go-mod/otelutils v0.0.6
+	github.com/cyverse-de/go-mod/pbinit v0.2.0
 	github.com/cyverse-de/go-mod/subjects v0.1.4
 	github.com/cyverse-de/messaging/v9 v9.1.5
-	github.com/cyverse-de/p/go/qms v0.2.1
+	github.com/cyverse-de/p/go/qms v0.3.0
+	github.com/cyverse-de/p/go/ptypes v0.1.0
 	github.com/jmoiron/sqlx v1.3.5
 	github.com/labstack/echo/v4 v4.11.4
 	github.com/labstack/gommon v0.4.2
@@ -25,20 +25,18 @@ require (
 	github.com/streadway/amqp v1.1.0
 	github.com/uptrace/opentelemetry-go-extra/otelsql v0.2.3
 	github.com/uptrace/opentelemetry-go-extra/otelsqlx v0.2.3
-	go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho v0.49.0
-	go.opentelemetry.io/otel v1.24.0
-	google.golang.org/protobuf v1.36.6
+	go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho v0.66.0
+	go.opentelemetry.io/otel v1.41.0
 )
 
 require (
 	github.com/cyverse-de/model/v6 v6.0.1 // indirect
-	github.com/cyverse-de/p v0.0.0-20240228001927-426a6bd80191 // indirect
-	github.com/cyverse-de/p/go/analysis v0.0.16 // indirect
-	github.com/cyverse-de/p/go/containers v0.0.2 // indirect
-	github.com/cyverse-de/p/go/header v0.0.4 // indirect
-	github.com/cyverse-de/p/go/monitoring v0.0.5 // indirect
-	github.com/cyverse-de/p/go/svcerror v0.0.8 // indirect
-	github.com/cyverse-de/p/go/user v0.0.11 // indirect
+	github.com/cyverse-de/p/go/analysis v0.1.0 // indirect
+	github.com/cyverse-de/p/go/containers v0.1.0 // indirect
+	github.com/cyverse-de/p/go/header v0.1.0 // indirect
+	github.com/cyverse-de/p/go/monitoring v0.1.0 // indirect
+	github.com/cyverse-de/p/go/svcerror v0.1.0 // indirect
+	github.com/cyverse-de/p/go/user v0.1.0 // indirect
 	github.com/fsnotify/fsnotify v1.7.0 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
@@ -69,10 +67,9 @@ require (
 	github.com/subosito/gotenv v1.6.0 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect
-	go.opentelemetry.io/otel/exporters/jaeger v1.17.0 // indirect
-	go.opentelemetry.io/otel/metric v1.24.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.24.0 // indirect
-	go.opentelemetry.io/otel/trace v1.24.0 // indirect
+	go.opentelemetry.io/otel/metric v1.41.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.41.0 // indirect
+	go.opentelemetry.io/otel/trace v1.41.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	golang.org/x/crypto v0.20.0 // indirect
 	golang.org/x/exp v0.0.0-20240222234643-814bf88cf225 // indirect

@@ -11,13 +11,12 @@ import (
 	"github.com/cyverse-de/data-usage-api/util"
 	"github.com/cyverse-de/go-mod/gotelnats"
 	"github.com/cyverse-de/go-mod/pbinit"
-	"github.com/cyverse-de/go-mod/protobufjson"
 	"github.com/cyverse-de/go-mod/subjects"
+	"github.com/cyverse-de/p/go/ptypes"
 	"github.com/cyverse-de/p/go/qms"
 	"github.com/labstack/gommon/log"
 	"github.com/nats-io/nats.go"
 	"github.com/samber/lo"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Connector struct {
@@ -66,7 +65,6 @@ func (nc *Connector) Subscribe(name string, handler nats.Handler) (string, strin
 }
 
 func NewConnector(cs *ConnectorSettings) (*Connector, error) {
-	nats.RegisterEncoder("protojson", protobufjson.NewCodec(protobufjson.WithEmitUnpopulated()))
 
 	nc, err := nats.Connect(
 		cs.NATSCluster,
@@ -94,7 +92,7 @@ func NewConnector(cs *ConnectorSettings) (*Connector, error) {
 		return nil, err
 	}
 
-	ec, err := nats.NewEncodedConn(nc, "protojson")
+	ec, err := nats.NewEncodedConn(nc, nats.JSON_ENCODER)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +183,7 @@ func (nc *Connector) UpdateUsageForUser(ctx context.Context, config *config.Conf
 
 	up := &qms.Update{
 		Value:         usageValue,
-		EffectiveDate: timestamppb.Now(),
+		EffectiveDate: ptypes.Now(),
 		Operation: &qms.UpdateOperation{
 			Name: "SET",
 		},
