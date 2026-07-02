@@ -22,7 +22,8 @@ import (
 type Connector struct {
 	baseSubject string
 	baseQueue   string
-	Conn        *nats.EncodedConn
+	//nolint:staticcheck // EncodedConn retirement is a planned follow-up to the protobuf removal
+	Conn *nats.EncodedConn
 }
 
 type ConnectorSettings struct {
@@ -51,12 +52,14 @@ func (nc *Connector) buildQueueName(qBase string, fields ...string) string {
 	return fmt.Sprintf("%s.%s", qBase, strings.Join(fields, "."))
 }
 
+//nolint:staticcheck // EncodedConn retirement is a planned follow-up to the protobuf removal
 func (nc *Connector) Subscribe(name string, handler nats.Handler) (string, string, error) {
 	var err error
 
 	subject := nc.buildSubject(nc.baseSubject, name)
 	queue := nc.buildQueueName(nc.baseQueue, name)
 
+	//nolint:staticcheck // EncodedConn retirement is a planned follow-up to the protobuf removal
 	if _, err = nc.Conn.QueueSubscribe(subject, queue, handler); err != nil {
 		return "", "", err
 	}
@@ -92,6 +95,7 @@ func NewConnector(cs *ConnectorSettings) (*Connector, error) {
 		return nil, err
 	}
 
+	//nolint:staticcheck // EncodedConn retirement is a planned follow-up to the protobuf removal
 	ec, err := nats.NewEncodedConn(nc, nats.JSON_ENCODER)
 	if err != nil {
 		return nil, err
