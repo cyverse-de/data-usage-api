@@ -11,19 +11,19 @@ import (
 	"github.com/cyverse-de/data-usage-api/util"
 	"github.com/cyverse-de/go-mod/gotelnats"
 	"github.com/cyverse-de/go-mod/pbinit"
-	"github.com/cyverse-de/go-mod/protobufjson"
 	"github.com/cyverse-de/go-mod/subjects"
+	"github.com/cyverse-de/p/go/ptypes"
 	"github.com/cyverse-de/p/go/qms"
 	"github.com/labstack/gommon/log"
 	"github.com/nats-io/nats.go"
 	"github.com/samber/lo"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 type Connector struct {
 	baseSubject string
 	baseQueue   string
-	Conn        *nats.EncodedConn
+	//nolint:staticcheck // EncodedConn retirement is a planned follow-up to the protobuf removal
+	Conn *nats.EncodedConn
 }
 
 type ConnectorSettings struct {
@@ -52,12 +52,14 @@ func (nc *Connector) buildQueueName(qBase string, fields ...string) string {
 	return fmt.Sprintf("%s.%s", qBase, strings.Join(fields, "."))
 }
 
+//nolint:staticcheck // EncodedConn retirement is a planned follow-up to the protobuf removal
 func (nc *Connector) Subscribe(name string, handler nats.Handler) (string, string, error) {
 	var err error
 
 	subject := nc.buildSubject(nc.baseSubject, name)
 	queue := nc.buildQueueName(nc.baseQueue, name)
 
+	//nolint:staticcheck // EncodedConn retirement is a planned follow-up to the protobuf removal
 	if _, err = nc.Conn.QueueSubscribe(subject, queue, handler); err != nil {
 		return "", "", err
 	}
@@ -66,7 +68,6 @@ func (nc *Connector) Subscribe(name string, handler nats.Handler) (string, strin
 }
 
 func NewConnector(cs *ConnectorSettings) (*Connector, error) {
-	nats.RegisterEncoder("protojson", protobufjson.NewCodec(protobufjson.WithEmitUnpopulated()))
 
 	nc, err := nats.Connect(
 		cs.NATSCluster,
@@ -94,7 +95,8 @@ func NewConnector(cs *ConnectorSettings) (*Connector, error) {
 		return nil, err
 	}
 
-	ec, err := nats.NewEncodedConn(nc, "protojson")
+	//nolint:staticcheck // EncodedConn retirement is a planned follow-up to the protobuf removal
+	ec, err := nats.NewEncodedConn(nc, nats.JSON_ENCODER)
 	if err != nil {
 		return nil, err
 	}
@@ -185,7 +187,7 @@ func (nc *Connector) UpdateUsageForUser(ctx context.Context, config *config.Conf
 
 	up := &qms.Update{
 		Value:         usageValue,
-		EffectiveDate: timestamppb.Now(),
+		EffectiveDate: ptypes.Now(),
 		Operation: &qms.UpdateOperation{
 			Name: "SET",
 		},
