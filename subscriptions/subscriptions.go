@@ -5,11 +5,9 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/url"
-	"strings"
 	"time"
 
 	"github.com/cyverse-de/data-usage-api/config"
@@ -28,19 +26,28 @@ const dataSizeResource = "data.size"
 // serves sit on the /current and /overage request paths, so an unresponsive subscriptions must not pin them.
 const requestTimeout = 30 * time.Second
 
+// maxErrorBodySize caps how much of an error response body is read while looking for the error envelope.
+const maxErrorBodySize = 64 * 1024
+
 // Client talks to the subscriptions service over HTTP.
 type Client struct {
 	baseURL *url.URL
 	client  *http.Client
 }
 
-// NewClient returns a Client for the given raw base URL.
+// NewClient returns a Client for the given raw base URL, rejecting URLs a request could never reach so
+// misconfiguration surfaces at startup instead of on the first lookup.
 func NewClient(baseURL string) (*Client, error) {
 	parsed, err := url.Parse(baseURL)
 	if err != nil {
 		return nil, errors.Wrapf(err, "unable to parse the subscriptions base URL %s", baseURL)
 	}
-	parsed.Path = strings.TrimSuffix(parsed.Path, "/")
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return nil, errors.Errorf("the subscriptions base URL %q must use http or https", baseURL)
+	}
+	if parsed.Host == "" {
+		return nil, errors.Errorf("the subscriptions base URL %q has no host", baseURL)
+	}
 
 	return &Client{
 		baseURL: parsed,
@@ -48,20 +55,8 @@ func NewClient(baseURL string) (*Client, error) {
 	}, nil
 }
 
-func (c *Client) url(components ...string) *url.URL {
-	newURL := *c.baseURL
-
-	escaped := make([]string, len(components))
-	for i, component := range components {
-		escaped[i] = url.PathEscape(component)
-	}
-	newURL.Path = fmt.Sprintf("%s/%s", newURL.Path, strings.Join(escaped, "/"))
-
-	return &newURL
-}
-
-// serviceError converts a populated response error envelope into an error. subscriptions reports request
-// failures in the response body as well as the status code, so a 2xx response can still describe a failure.
+// serviceError converts a populated response error envelope into an error. subscriptions reports failures as
+// non-2xx responses, but the envelope is checked on 2xx bodies too in case a handler ever reports one there.
 func serviceError(serr *svcerror.ServiceError) error {
 	if serr == nil || serr.ErrorCode == svcerror.ErrorCode_UNSET {
 		return nil
@@ -84,6 +79,14 @@ func (c *Client) do(ctx context.Context, method string, reqURL *url.URL, body io
 	defer resp.Body.Close() // nolint: errcheck
 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
+		// Error responses carry the same envelope in the body; surface its message so failures can be
+		// triaged from logs without querying subscriptions.
+		var envelope struct {
+			Error *svcerror.ServiceError `json:"error"`
+		}
+		if decodeErr := json.NewDecoder(io.LimitReader(resp.Body, maxErrorBodySize)).Decode(&envelope); decodeErr == nil && envelope.Error != nil && envelope.Error.Message != "" {
+			return errors.Errorf("%s returned %d: %s", reqURL, resp.StatusCode, envelope.Error.Message)
+		}
 		return errors.Errorf("%s returned %d", reqURL, resp.StatusCode)
 	}
 
@@ -100,7 +103,7 @@ func (c *Client) UserCurrentDataUsage(ctx context.Context, config *config.Config
 	user := util.FixUsername(username, config)
 
 	var response qms.UsageList
-	if err := c.do(ctx, http.MethodGet, c.url("users", user, "usages"), nil, &response); err != nil {
+	if err := c.do(ctx, http.MethodGet, c.baseURL.JoinPath("users", user, "usages"), nil, &response); err != nil {
 		return nil, err
 	}
 	if err := serviceError(response.Error); err != nil {
@@ -131,7 +134,7 @@ func (c *Client) AllResourceOveragesForUser(ctx context.Context, config *config.
 	user := util.FixUsername(username, config)
 
 	var response qms.OverageList
-	if err := c.do(ctx, http.MethodGet, c.url("users", user, "overages"), nil, &response); err != nil {
+	if err := c.do(ctx, http.MethodGet, c.baseURL.JoinPath("users", user, "overages"), nil, &response); err != nil {
 		return nil, err
 	}
 	if err := serviceError(response.Error); err != nil {
@@ -162,7 +165,7 @@ func (c *Client) UpdateUsageForUser(ctx context.Context, config *config.Config, 
 	}
 
 	var response qms.AddUpdateResponse
-	if err = c.do(ctx, http.MethodPut, c.url("user", user, "updates"), bytes.NewReader(body), &response); err != nil {
+	if err = c.do(ctx, http.MethodPut, c.baseURL.JoinPath("user", user, "updates"), bytes.NewReader(body), &response); err != nil {
 		return nil, err
 	}
 	if err = serviceError(response.Error); err != nil {
@@ -182,30 +185,6 @@ func (c *Client) UpdateUsageForUser(ctx context.Context, config *config.Config, 
 	}, nil
 }
 
-// SendUserUsageUpdateMessage sets the user's data.size usage directly, bypassing the updates table. This
-// duplicates the value UpdateUsageForUser already recorded via an update; it is kept because the NATS publish
-// it replaces did the same thing.
-func (c *Client) SendUserUsageUpdateMessage(ctx context.Context, username string, total float64) error {
-	request := &qms.AddUsage{
-		Username:     username,
-		ResourceName: dataSizeResource,
-		UpdateType:   "SET",
-		UsageValue:   total,
-	}
-
-	body, err := json.Marshal(request)
-	if err != nil {
-		return errors.Wrap(err, "unable to marshal the usage")
-	}
-
-	var response qms.UsageResponse
-	if err = c.do(ctx, http.MethodPut, c.url("users", username, "usages"), bytes.NewReader(body), &response); err != nil {
-		return err
-	}
-
-	return serviceError(response.Error)
-}
-
 // AddUserUpdatesBatch records usage for each user in usages, continuing past individual failures.
 func (c *Client) AddUserUpdatesBatch(ctx context.Context, config *config.Config, usages map[string]float64) ([]*UserDataUsage, error) {
 	keys := lo.Keys(usages)
@@ -215,6 +194,7 @@ func (c *Client) AddUserUpdatesBatch(ctx context.Context, config *config.Config,
 		u, err := c.UpdateUsageForUser(ctx, config, k, usages[k])
 		if err != nil {
 			errs = append(errs, err)
+			continue
 		}
 		retval = append(retval, u)
 	}

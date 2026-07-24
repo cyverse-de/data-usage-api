@@ -19,7 +19,7 @@ func (a *App) UpdateUserCurrentUsageHandler(c echo.Context) error {
 	}
 	user = util.FixUsername(user, a.configuration)
 
-	dbs := db.NewBoth(a.dedb, a.icat, a.configuration, a.nc)
+	dbs := db.NewBoth(a.dedb, a.icat, a.configuration, a.subs)
 
 	res, err := dbs.UpdateUserDataUsage(context, user)
 	if err != nil {

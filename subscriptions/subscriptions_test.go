@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/cyverse-de/data-usage-api/config"
@@ -185,50 +186,32 @@ func TestUpdateUsageForUserMissingUpdate(t *testing.T) {
 	}
 }
 
-func TestSendUserUsageUpdateMessage(t *testing.T) {
-	var (
-		gotPath   string
-		gotMethod string
-		gotBody   qms.AddUsage
-	)
-
-	c := newTestClient(t, http.StatusOK, `{"usage":{"usage":42}}`, func(r *http.Request) {
-		gotPath = r.URL.Path
-		gotMethod = r.Method
-		_ = json.NewDecoder(r.Body).Decode(&gotBody)
-	})
-
-	if err := c.SendUserUsageUpdateMessage(context.Background(), "someuser@example.org", 42); err != nil {
-		t.Fatalf("unexpected error: %s", err)
-	}
-
-	if gotMethod != http.MethodPut {
-		t.Errorf("method = %s, want PUT", gotMethod)
-	}
-	if want := "/users/someuser@example.org/usages"; gotPath != want {
-		t.Errorf("path = %s, want %s", gotPath, want)
-	}
-	if gotBody.ResourceName != "data.size" || gotBody.UpdateType != "SET" || gotBody.UsageValue != 42 {
-		t.Errorf("request body did not round-trip: %+v", gotBody)
-	}
-}
-
 func TestErrorHandling(t *testing.T) {
 	tests := []struct {
-		name   string
-		status int
-		body   string
+		name        string
+		status      int
+		body        string
+		wantContain string
 	}{
 		{
 			// A populated error envelope means failure even on a 2xx response.
-			name:   "error envelope on a 2xx response",
-			status: http.StatusOK,
-			body:   `{"error":{"error_code":"NOT_FOUND","status_code":404,"message":"user name not found"}}`,
+			name:        "error envelope on a 2xx response",
+			status:      http.StatusOK,
+			body:        `{"error":{"error_code":"NOT_FOUND","status_code":404,"message":"user name not found"}}`,
+			wantContain: "user name not found",
 		},
 		{
-			name:   "non-2xx status",
-			status: http.StatusInternalServerError,
-			body:   `{"error":{"error_code":"INTERNAL","status_code":500,"message":"boom"}}`,
+			// subscriptions puts the error envelope in non-2xx bodies; its message must survive for triage.
+			name:        "non-2xx status carries the server message",
+			status:      http.StatusInternalServerError,
+			body:        `{"error":{"error_code":"INTERNAL","status_code":500,"message":"boom"}}`,
+			wantContain: "boom",
+		},
+		{
+			name:        "non-2xx with an unparseable body still reports the status",
+			status:      http.StatusBadGateway,
+			body:        `<html>bad gateway</html>`,
+			wantContain: "502",
 		},
 		{
 			name:   "unparseable body",
@@ -241,15 +224,99 @@ func TestErrorHandling(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			c := newTestClient(t, tt.status, tt.body, nil)
 
-			if _, err := c.UserCurrentDataUsage(context.Background(), testConfig(), "someuser"); err == nil {
-				t.Error("UserCurrentDataUsage: expected an error, got nil")
+			assertErr := func(call string, err error) {
+				t.Helper()
+				if err == nil {
+					t.Errorf("%s: expected an error, got nil", call)
+					return
+				}
+				if tt.wantContain != "" && !strings.Contains(err.Error(), tt.wantContain) {
+					t.Errorf("%s: error %q does not contain %q", call, err, tt.wantContain)
+				}
 			}
-			if _, err := c.AllResourceOveragesForUser(context.Background(), testConfig(), "someuser"); err == nil {
-				t.Error("AllResourceOveragesForUser: expected an error, got nil")
-			}
-			if _, err := c.UpdateUsageForUser(context.Background(), testConfig(), "someuser", 1); err == nil {
-				t.Error("UpdateUsageForUser: expected an error, got nil")
+
+			_, err := c.UserCurrentDataUsage(context.Background(), testConfig(), "someuser")
+			assertErr("UserCurrentDataUsage", err)
+			_, err = c.AllResourceOveragesForUser(context.Background(), testConfig(), "someuser")
+			assertErr("AllResourceOveragesForUser", err)
+			_, err = c.UpdateUsageForUser(context.Background(), testConfig(), "someuser", 1)
+			assertErr("UpdateUsageForUser", err)
+		})
+	}
+}
+
+func TestNewClientValidation(t *testing.T) {
+	tests := []struct {
+		name    string
+		baseURL string
+		wantErr bool
+	}{
+		{name: "plain http", baseURL: "http://subscriptions"},
+		{name: "https with a path prefix", baseURL: "https://example.org/prefix/"},
+		{name: "empty", baseURL: "", wantErr: true},
+		{name: "missing scheme", baseURL: "subscriptions", wantErr: true},
+		{name: "unsupported scheme", baseURL: "nats://subscriptions", wantErr: true},
+		{name: "missing host", baseURL: "http://", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if _, err := NewClient(tt.baseURL); (err != nil) != tt.wantErr {
+				t.Errorf("NewClient(%q) error = %v, wantErr %v", tt.baseURL, err, tt.wantErr)
 			}
 		})
+	}
+}
+
+func TestBaseURLPathPrefix(t *testing.T) {
+	var gotPath string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotPath = r.URL.Path
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"usages":[{"usage":1,"resource_type":{"name":"data.size"}}]}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	c, err := NewClient(srv.URL + "/prefix/")
+	if err != nil {
+		t.Fatalf("building the client: %s", err)
+	}
+
+	if _, err := c.UserCurrentDataUsage(context.Background(), testConfig(), "someuser"); err != nil {
+		t.Fatalf("unexpected error: %s", err)
+	}
+	if want := "/prefix/users/someuser@example.org/usages"; gotPath != want {
+		t.Errorf("path = %s, want %s", gotPath, want)
+	}
+}
+
+func TestAddUserUpdatesBatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if strings.Contains(r.URL.Path, "/bad@") {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":{"error_code":"INTERNAL","status_code":500,"message":"boom"}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"update":{"uuid":"good-uuid","value":5}}`))
+	}))
+	t.Cleanup(srv.Close)
+
+	c, err := NewClient(srv.URL)
+	if err != nil {
+		t.Fatalf("building the client: %s", err)
+	}
+
+	res, err := c.AddUserUpdatesBatch(context.Background(), testConfig(), map[string]float64{"good": 5, "bad": 6})
+	if err == nil {
+		t.Error("expected the failed user's error to be returned")
+	}
+	// The failed user must not leave a nil placeholder among the successful results.
+	if len(res) != 1 {
+		t.Fatalf("results = %d entries, want 1: %+v", len(res), res)
+	}
+	if res[0] == nil || res[0].ID != "good-uuid" {
+		t.Errorf("the successful update did not round-trip: %+v", res[0])
 	}
 }

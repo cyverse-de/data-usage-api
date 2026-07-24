@@ -19,17 +19,17 @@ type App struct {
 	icat          *sqlx.DB
 	router        *echo.Echo
 	amqp          *messaging.Client
-	nc            *subscriptions.Client
+	subs          *subscriptions.Client
 	configuration *config.Config
 }
 
-func New(dedb *sqlx.DB, icat *sqlx.DB, amqp *messaging.Client, nc *subscriptions.Client, configuration *config.Config) *App {
+func New(dedb *sqlx.DB, icat *sqlx.DB, amqp *messaging.Client, subs *subscriptions.Client, configuration *config.Config) *App {
 	return &App{
 		dedb:          dedb,
 		icat:          icat,
 		router:        echo.New(),
 		amqp:          amqp,
-		nc:            nc,
+		subs:          subs,
 		configuration: configuration,
 	}
 }
