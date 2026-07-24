@@ -5,7 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/cyverse-de/data-usage-api/config"
-	"github.com/cyverse-de/data-usage-api/natsconn"
+	"github.com/cyverse-de/data-usage-api/subscriptions"
 	"github.com/cyverse-de/data-usage-api/util"
 	"github.com/pkg/errors"
 
@@ -16,7 +16,7 @@ type BothDatabases struct {
 	deconn        DatabaseTxAccessor
 	icatconn      DatabaseTxAccessor
 	configuration *config.Config
-	nc            *natsconn.Connector
+	subs          *subscriptions.Client
 
 	DERollback func()
 	DECommit   func() error
@@ -28,8 +28,8 @@ type BothDatabases struct {
 	icattx *ICATDatabase
 }
 
-func NewBoth(dedb DatabaseTxAccessor, icatdb DatabaseTxAccessor, config *config.Config, nc *natsconn.Connector) *BothDatabases {
-	return &BothDatabases{deconn: dedb, icatconn: icatdb, configuration: config, nc: nc}
+func NewBoth(dedb DatabaseTxAccessor, icatdb DatabaseTxAccessor, config *config.Config, subs *subscriptions.Client) *BothDatabases {
+	return &BothDatabases{deconn: dedb, icatconn: icatdb, configuration: config, subs: subs}
 }
 
 func (b *BothDatabases) DETx(ctx context.Context) (*DEDatabase, error) {
@@ -118,7 +118,7 @@ func (b *BothDatabases) ICATTx(ctx context.Context) (*ICATDatabase, error) {
 	return b.icattx, nil
 }
 
-func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username string) (*natsconn.UserDataUsage, error) {
+func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username string) (*subscriptions.UserDataUsage, error) {
 	ctx, span := otel.Tracer(otelName).Start(context, "UpdateUserDataUsage")
 	defer span.End()
 
@@ -152,7 +152,7 @@ func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username st
 	// if this update shouldn't be added, or should amend a prior reading, do it here or in the method called below
 	// or maybe have an async cleanup process that deduplicates readings
 
-	res, err := b.nc.UpdateUsageForUser(ctx, b.configuration, username, float64(usagenum))
+	res, err := b.subs.UpdateUsageForUser(ctx, b.configuration, username, float64(usagenum))
 	if err == sql.ErrNoRows {
 		e := errors.Wrap(err, "No data could be inserted. Perhaps the user doesn't exist in the DE database")
 		log.Error(e)
@@ -169,7 +169,7 @@ func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username st
 	return res, err
 }
 
-func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start, end string) ([]*natsconn.UserDataUsage, error) {
+func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start, end string) ([]*subscriptions.UserDataUsage, error) {
 	ctx, span := otel.Tracer(otelName).Start(context, "UpdateUserDataUsageBatch")
 	defer span.End()
 
@@ -217,7 +217,7 @@ func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start,
 		return nil, e
 	}
 
-	res, err := b.nc.AddUserUpdatesBatch(ctx, b.configuration, usagesFixed)
+	res, err := b.subs.AddUserUpdatesBatch(ctx, b.configuration, usagesFixed)
 	if err != nil {
 		return nil, errors.Wrap(err, "Error inserting new usage")
 	}

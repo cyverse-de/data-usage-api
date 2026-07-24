@@ -14,8 +14,7 @@ import (
 	"github.com/cyverse-de/data-usage-api/api"
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/logging"
-	"github.com/cyverse-de/data-usage-api/natsconn"
-	"github.com/nats-io/nats.go"
+	"github.com/cyverse-de/data-usage-api/subscriptions"
 
 	"github.com/cyverse-de/messaging/v9"
 	"github.com/jmoiron/sqlx"
@@ -27,8 +26,6 @@ import (
 	"github.com/uptrace/opentelemetry-go-extra/otelsql"
 	"github.com/uptrace/opentelemetry-go-extra/otelsqlx"
 
-	decfg "github.com/cyverse-de/go-mod/cfg"
-	"github.com/cyverse-de/go-mod/gotelnats"
 	"github.com/cyverse-de/go-mod/otelutils"
 	semconv "go.opentelemetry.io/otel/semconv/v1.7.0"
 
@@ -82,19 +79,10 @@ func main() {
 		configuration *config.Config
 		app           *api.App
 
-		configPath    = flag.String("config", "/etc/iplant/de/data-usage-api.yml", "Full path to the configuration file")
-		listenPort    = flag.Int("port", 60000, "The port the service listens on for requests")
-		logLevel      = flag.String("log-level", "info", "One of trace, debug, info, warn, error, fatal, or panic.")
-		dotEnvPath    = flag.String("dotenv-path", decfg.DefaultDotEnvPath, "Path to the dotenv file")
-		tlsCert       = flag.String("tlscert", gotelnats.DefaultTLSCertPath, "Path to the NATS TLS cert file")
-		tlsKey        = flag.String("tlskey", gotelnats.DefaultTLSKeyPath, "Path to the NATS TLS key file")
-		caCert        = flag.String("tlsca", gotelnats.DefaultTLSCAPath, "Path to the NATS TLS CA file")
-		credsPath     = flag.String("creds", gotelnats.DefaultCredsPath, "Path to the NATS creds file")
-		maxReconnects = flag.Int("max-reconnects", gotelnats.DefaultMaxReconnects, "Maximum number of reconnection attempts to NATS")
-		reconnectWait = flag.Int("reconnect-wait", gotelnats.DefaultReconnectWait, "Seconds to wait between reconnection attempts to NATS")
-		envPrefix     = flag.String("env-prefix", decfg.DefaultEnvPrefix, "The prefix for environment variables")
-		natsSubject   = flag.String("nats-subject", "cyverse.data.usage.>", "The subject prefix for NATS subscriptions")
-		natsQueue     = flag.String("nats-queue", "cyverse.data.usage", "The name of the NATS queue")
+		configPath        = flag.String("config", "/etc/iplant/de/data-usage-api.yml", "Full path to the configuration file")
+		listenPort        = flag.Int("port", 60000, "The port the service listens on for requests")
+		logLevel          = flag.String("log-level", "info", "One of trace, debug, info, warn, error, fatal, or panic.")
+		subscriptionsBase = flag.String("subscriptions-base-uri", "http://subscriptions", "The base URL for contacting the subscriptions service")
 	)
 
 	flag.Parse()
@@ -107,6 +95,7 @@ func main() {
 
 	log.Infof("config path is %s", *configPath)
 	log.Infof("listen port is %d", *listenPort)
+	log.Infof("subscriptions base URI is %s", *subscriptionsBase)
 
 	cfg, err = configurate.InitDefaults(*configPath, defaultConfig)
 	if err != nil {
@@ -119,61 +108,10 @@ func main() {
 		log.Fatal(err)
 	}
 
-	// read in NATS configuration from the dotenv file.
-	envCfg, err := decfg.Init(&decfg.Settings{
-		EnvPrefix:   *envPrefix,
-		ConfigPath:  *configPath,
-		DotEnvPath:  *dotEnvPath,
-		StrictMerge: false,
-		FileType:    decfg.YAML,
-	})
+	subscriptionsClient, err := subscriptions.NewClient(*subscriptionsBase)
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// set up NATS connection
-	natsCluster := envCfg.String("nats.cluster")
-	if natsCluster == "" {
-		log.Fatalf("The %sNATS_CLUSTER environment variable or nats.cluster configuration value must be set", *envPrefix)
-	}
-
-	log.Infof("nats.cluster is set to '%s'", natsCluster)
-	log.Infof("NATS TLS cert file is %s", *tlsCert)
-	log.Infof("NATS TLS key file is %s", *tlsKey)
-	log.Infof("NATS CA cert file is %s", *caCert)
-	log.Infof("NATS creds file is %s", *credsPath)
-	log.Infof("NATS max reconnects is %d", *maxReconnects)
-	log.Infof("NATS reonnect wait is %d", *reconnectWait)
-
-	natsConn, err := natsconn.NewConnector(&natsconn.ConnectorSettings{
-		BaseSubject:   *natsSubject,
-		BaseQueue:     *natsQueue,
-		NATSCluster:   natsCluster,
-		CredsPath:     *credsPath,
-		TLSKeyPath:    *tlsKey,
-		TLSCertPath:   *tlsCert,
-		CAPath:        *caCert,
-		MaxReconnects: *maxReconnects,
-		ReconnectWait: *reconnectWait,
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	ssubject, squeue, err := natsConn.Subscribe("ping", func(m *nats.Msg) {
-		log.Info("ping message received")
-		err := m.Respond([]byte("pong"))
-		if err != nil {
-			log.Error(err)
-		}
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	log.Infof("subscribed to %s on queue %s via NATS", ssubject, squeue)
-
-	log.Info("connected to nats cluster")
 
 	// set up database connection
 	dbconn = otelsqlx.MustConnect("postgres", configuration.DBURI,
@@ -223,9 +161,9 @@ func main() {
 		if del.RoutingKey == "index.all" || del.RoutingKey == "index.usage.data" {
 			err = a.SendBatchMessages(ctx, del, dbconn, icatconn, publishClient, configuration)
 		} else if strings.HasPrefix(del.RoutingKey, a.BatchUserPrefix) {
-			err = a.UpdateUserBatchHandler(ctx, del, dbconn, icatconn, natsConn, configuration)
+			err = a.UpdateUserBatchHandler(ctx, del, dbconn, icatconn, subscriptionsClient, configuration)
 		} else if strings.HasPrefix(del.RoutingKey, a.SingleUserPrefix) {
-			err = a.UpdateUserHandler(ctx, del, dbconn, icatconn, natsConn, configuration)
+			err = a.UpdateUserHandler(ctx, del, dbconn, icatconn, subscriptionsClient, configuration)
 		}
 		if err != nil {
 			log.Error(errors.Wrap(err, "Error handling message"))
@@ -259,7 +197,7 @@ func main() {
 		amqpHandlerFunc,
 		1)
 
-	app = api.New(dbconn, icatconn, publishClient, natsConn, configuration)
+	app = api.New(dbconn, icatconn, publishClient, subscriptionsClient, configuration)
 
 	log.Infof("listening on port %d", *listenPort)
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%s", strconv.Itoa(*listenPort)), app.Router()))

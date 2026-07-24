@@ -1,4 +1,4 @@
-package natsconn
+package subscriptions
 
 import "time"
 

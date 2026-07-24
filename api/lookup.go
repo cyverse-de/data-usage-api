@@ -32,7 +32,7 @@ func (a *App) UserCurrentUsageHandler(c echo.Context) error {
 	}
 
 	// Get the current usage as recorded in QMS.
-	res, err := a.nc.UserCurrentDataUsage(context, a.configuration, user)
+	res, err := a.subs.UserCurrentDataUsage(context, a.configuration, user)
 
 	if err == sql.ErrNoRows {
 		log.Tracef("Enqueuing update message for %s", user)
@@ -75,7 +75,7 @@ func (a *App) UserDataOverageHandler(c echo.Context) error {
 	}
 	user = util.FixUsername(user, a.configuration)
 
-	overages, err := a.nc.AllResourceOveragesForUser(context, a.configuration, user)
+	overages, err := a.subs.AllResourceOveragesForUser(context, a.configuration, user)
 	if err != nil {
 		e := errors.Wrap(err, "failed getting all resource overages")
 		log.Error(e)
