@@ -10,7 +10,7 @@ import (
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/db"
 	"github.com/cyverse-de/data-usage-api/logging"
-	"github.com/cyverse-de/data-usage-api/natsconn"
+	"github.com/cyverse-de/data-usage-api/subscriptions"
 	"github.com/cyverse-de/data-usage-api/util"
 	"github.com/cyverse-de/messaging/v9"
 	"github.com/jmoiron/sqlx"
@@ -26,7 +26,7 @@ var log = logging.Log.WithFields(logrus.Fields{"package": "amqp"})
 const SingleUserPrefix = "index.usage.data.user"
 const BatchUserPrefix = "index.usage.data.batch.user"
 
-func UpdateUserHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.DB, nc *natsconn.Connector, configuration *config.Config) error {
+func UpdateUserHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.DB, nc *subscriptions.Client, configuration *config.Config) error {
 	username := del.RoutingKey[len(SingleUserPrefix)+1:]
 	user := util.FixUsername(username, configuration)
 
@@ -59,7 +59,7 @@ func UpdateUserHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.
 	return nil
 }
 
-func UpdateUserBatchHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.DB, nc *natsconn.Connector, configuration *config.Config) error {
+func UpdateUserBatchHandler(ctx context.Context, del amqp.Delivery, dedb, icat *sqlx.DB, nc *subscriptions.Client, configuration *config.Config) error {
 	usernames := strings.SplitN(del.RoutingKey[len(BatchUserPrefix)+1:], ".", 2)
 	log.Infof("Updating the user batch from %s to %s", usernames[0], usernames[1])
 

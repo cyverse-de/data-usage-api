@@ -5,7 +5,7 @@ import (
 	"database/sql"
 
 	"github.com/cyverse-de/data-usage-api/config"
-	"github.com/cyverse-de/data-usage-api/natsconn"
+	"github.com/cyverse-de/data-usage-api/subscriptions"
 	"github.com/cyverse-de/data-usage-api/util"
 	"github.com/pkg/errors"
 
@@ -16,7 +16,7 @@ type BothDatabases struct {
 	deconn        DatabaseTxAccessor
 	icatconn      DatabaseTxAccessor
 	configuration *config.Config
-	nc            *natsconn.Connector
+	nc            *subscriptions.Client
 
 	DERollback func()
 	DECommit   func() error
@@ -28,7 +28,7 @@ type BothDatabases struct {
 	icattx *ICATDatabase
 }
 
-func NewBoth(dedb DatabaseTxAccessor, icatdb DatabaseTxAccessor, config *config.Config, nc *natsconn.Connector) *BothDatabases {
+func NewBoth(dedb DatabaseTxAccessor, icatdb DatabaseTxAccessor, config *config.Config, nc *subscriptions.Client) *BothDatabases {
 	return &BothDatabases{deconn: dedb, icatconn: icatdb, configuration: config, nc: nc}
 }
 
@@ -118,7 +118,7 @@ func (b *BothDatabases) ICATTx(ctx context.Context) (*ICATDatabase, error) {
 	return b.icattx, nil
 }
 
-func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username string) (*natsconn.UserDataUsage, error) {
+func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username string) (*subscriptions.UserDataUsage, error) {
 	ctx, span := otel.Tracer(otelName).Start(context, "UpdateUserDataUsage")
 	defer span.End()
 
@@ -169,7 +169,7 @@ func (b *BothDatabases) UpdateUserDataUsage(context context.Context, username st
 	return res, err
 }
 
-func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start, end string) ([]*natsconn.UserDataUsage, error) {
+func (b *BothDatabases) UpdateUserDataUsageBatch(context context.Context, start, end string) ([]*subscriptions.UserDataUsage, error) {
 	ctx, span := otel.Tracer(otelName).Start(context, "UpdateUserDataUsageBatch")
 	defer span.End()
 

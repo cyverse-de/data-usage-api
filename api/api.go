@@ -3,7 +3,7 @@ package api
 import (
 	"github.com/cyverse-de/data-usage-api/config"
 	"github.com/cyverse-de/data-usage-api/logging"
-	"github.com/cyverse-de/data-usage-api/natsconn"
+	"github.com/cyverse-de/data-usage-api/subscriptions"
 	"github.com/cyverse-de/messaging/v9"
 	"github.com/jmoiron/sqlx"
 	"github.com/labstack/echo/v4"
@@ -19,11 +19,11 @@ type App struct {
 	icat          *sqlx.DB
 	router        *echo.Echo
 	amqp          *messaging.Client
-	nc            *natsconn.Connector
+	nc            *subscriptions.Client
 	configuration *config.Config
 }
 
-func New(dedb *sqlx.DB, icat *sqlx.DB, amqp *messaging.Client, nc *natsconn.Connector, configuration *config.Config) *App {
+func New(dedb *sqlx.DB, icat *sqlx.DB, amqp *messaging.Client, nc *subscriptions.Client, configuration *config.Config) *App {
 	return &App{
 		dedb:          dedb,
 		icat:          icat,
